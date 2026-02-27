@@ -1,39 +1,179 @@
 # Flowengine
 
-TODO: Delete this and the text below, and describe your gem
+> [!IMPORTANT]
+> 
+> Gem's Responsibilities
+> 
+> * DSL
+> * Flow Definition
+> * AST-based Rule system
+> * Evaluator
+> * Engine runtime
+> * Validation adapter interface
+> * Graph exporter (Mermaid)
+> * Simulation runner
+> * No ActiveRecord.
+> * No Rails.
+> * No terminal code.
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/flowengine`. To experiment with that code, run `bin/console` for an interactive prompt.
+### Proposed Gem Structure
 
-## Installation
-
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
-
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```text
+flowengine/
+├── lib/
+│   ├── flowengine.rb
+│   ├── flowengine/
+│   │   ├── definition.rb
+│   │   ├── dsl.rb
+│   │   ├── node.rb
+│   │   ├── rule_ast.rb
+│   │   ├── evaluator.rb
+│   │   ├── engine.rb
+│   │   ├── validation/
+│   │   │   ├── adapter.rb
+│   │   │   └── dry_validation_adapter.rb
+│   │   ├── graph/
+│   │   │   └── mermaid_exporter.rb
+│   │   └── simulation.rb
+├── exe/
+│   └── flowengine
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+#### Core Concepts
 
-```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+Immutable structure representing flow graph.
+
+```ruby
+flowengine.define do
+  start :earnings
+
+  step :earnings do
+    type :multi_select
+    question "What are your main earnings?"
+    options %w[W2 1099 BusinessOwnership]
+
+    transition to: :business_details,
+               if: contains(:earnings, "BusinessOwnership")
+  end
+end
 ```
 
-## Usage
+Definition compiles DSL → Node objects → AST transitions.
 
-TODO: Write usage instructions here
+No runtime state.
 
-## Development
+#### Engine (Pure Runtime)
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+```ruby
+engine = flowengine::Engine.new(definition)
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+engine.current_step
+engine.answer(value)
+engine.finished?
+engine.answers
+```
 
-## Contributing
+Engine stores:
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/kigster/flowengine.
+* current node id
+* answer hash
+* evaluator
 
-## License
+No IO.
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+#### Rule AST (Clean & Extensible)
+
+You want AST objects, not hash blobs.
+
+```ruby
+Contains.new(:earnings, "BusinessOwnership")
+All.new(rule1, rule2)
+Equals.new(:marital_status, "Married")
+```
+
+Evaluator does polymorphic dispatch:
+
+```ruby
+rule.evaluate(context)
+```
+
+Cleaner than giant case statements.
+
+#### Validation (Dry Integration)
+
+Adapter pattern:
+
+```ruby
+class DryValidationAdapter < Adapter
+  def validate(step, input)
+    step.schema.call(input)
+  end
+end
+```
+
+Core does:
+
+```ruby
+validator.validate(step, input)
+```
+
+IMPORTANT: Core does not depend directly on dry-validation.
+
+#### Part 1b: CLI Layer (inside `flowengine-cli`)
+
+CLI should be thin.
+
+Use:
+
+* dry-cli
+* tty-prompt
+
+NOTE: Dress up the CLI/Terminal interface a bit. Use as much of the TTY-Toolkit as needed.
+
+#### Commands
+
+```bash
+flowengine run config.rb
+flowengine graph config.rb --format=mermaid
+flowengine simulate config.rb --answers=fixture.json
+```
+
+### Examples of Mermaid Charts
+
+```mermaid
+---
+config:
+  layout: dagre
+---
+flowchart LR
+    filing_status["What is your filing status for 2025?"] --> dependents["How many dependents do you have?"]
+    dependents --> income_types["Select all income types that apply to you in 2025."]
+    income_types -- Business in income_types --> business_count["How many total businesses do you own or are a part..."]
+    income_types -- Investment in income_types --> investment_details["What types of investments do you hold?"]
+    income_types -- Rental in income_types --> rental_details["Provide details about your rental properties."]
+    income_types --> state_filing["Which states do you need to file in?"]
+    business_count -- business_count > 2 --> complex_business_info["With more than 2 businesses, please provide your p..."]
+    business_count --> business_details["How many of each business type do you own?"]
+    complex_business_info --> business_details
+    business_details -- Investment in income_types --> investment_details
+    business_details -- Rental in income_types --> rental_details
+    business_details --> state_filing
+    investment_details -- Crypto in investment_details --> crypto_details["Please describe your cryptocurrency transactions (..."]
+    investment_details -- Rental in income_types --> rental_details
+    investment_details --> state_filing
+    crypto_details -- Rental in income_types --> rental_details
+    crypto_details --> state_filing
+    rental_details --> state_filing
+    state_filing --> foreign_accounts["Do you have any foreign financial accounts (bank a..."]
+    foreign_accounts -- "foreign_accounts == yes" --> foreign_account_details["How many foreign accounts do you have?"]
+    foreign_accounts --> deduction_types["Which additional deductions apply to you?"]
+    foreign_account_details --> deduction_types
+    deduction_types -- Charitable in deduction_types --> charitable_amount["What is your total estimated charitable contributi..."]
+    deduction_types --> contact_info["Please provide your contact information (name, ema..."]
+    charitable_amount -- charitable_amount > 5000 --> charitable_documentation["For charitable contributions over $5,000, please l..."]
+    charitable_amount --> contact_info
+    charitable_documentation --> contact_info
+    contact_info --> review@{ label: "Thank you! Please review your information. Type 'c..." }
+
+    review@{ shape: rect}
+```

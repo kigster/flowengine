@@ -4,6 +4,7 @@ set dotenv-load
 
 test:
     @bundle exec rspec
+    @bundle exec rubocop
 
 # Setup Ruby dependencies
 setup-ruby:
