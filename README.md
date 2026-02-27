@@ -1,5 +1,7 @@
 # Flowengine
 
+[![RSpec](https://github.com/kigster/flowengine/actions/workflows/rspec.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rspec.yml) [![RuboCop](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml)
+
 > [!IMPORTANT]
 >
 > Gem's Responsibilities
