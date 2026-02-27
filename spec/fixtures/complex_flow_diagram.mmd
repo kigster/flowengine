@@ -1,0 +1,46 @@
+flowchart TD
+  filing_status["What is your filing status for 2025?"]
+  filing_status --> dependents
+  dependents["How many dependents do you have?"]
+  dependents --> income_types
+  income_types["Select all income types that apply to you in 2025."]
+  income_types -->|"Business in income_types"| business_count
+  income_types -->|"Investment in income_types"| investment_details
+  income_types -->|"Rental in income_types"| rental_details
+  income_types --> state_filing
+  business_count["How many total businesses do you own or are a part..."]
+  business_count -->|"business_count > 2"| complex_business_info
+  business_count --> business_details
+  complex_business_info["With more than 2 businesses, please provide your p..."]
+  complex_business_info --> business_details
+  business_details["How many of each business type do you own?"]
+  business_details -->|"Investment in income_types"| investment_details
+  business_details -->|"Rental in income_types"| rental_details
+  business_details --> state_filing
+  investment_details["What types of investments do you hold?"]
+  investment_details -->|"Crypto in investment_details"| crypto_details
+  investment_details -->|"Rental in income_types"| rental_details
+  investment_details --> state_filing
+  crypto_details["Please describe your cryptocurrency transactions (..."]
+  crypto_details -->|"Rental in income_types"| rental_details
+  crypto_details --> state_filing
+  rental_details["Provide details about your rental properties."]
+  rental_details --> state_filing
+  state_filing["Which states do you need to file in?"]
+  state_filing --> foreign_accounts
+  foreign_accounts["Do you have any foreign financial accounts (bank a..."]
+  foreign_accounts -->|"foreign_accounts == yes"| foreign_account_details
+  foreign_accounts --> deduction_types
+  foreign_account_details["How many foreign accounts do you have?"]
+  foreign_account_details --> deduction_types
+  deduction_types["Which additional deductions apply to you?"]
+  deduction_types -->|"Charitable in deduction_types"| charitable_amount
+  deduction_types --> contact_info
+  charitable_amount["What is your total estimated charitable contributi..."]
+  charitable_amount -->|"charitable_amount > 5000"| charitable_documentation
+  charitable_amount --> contact_info
+  charitable_documentation["For charitable contributions over $5,000, please l..."]
+  charitable_documentation --> contact_info
+  contact_info["Please provide your contact information (name, ema..."]
+  contact_info --> review
+  review["Thank you! Please review your information. Type 'c..."]
