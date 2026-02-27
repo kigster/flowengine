@@ -121,25 +121,6 @@ validator.validate(step, input)
 
 IMPORTANT: Core does not depend directly on dry-validation.
 
-#### Part 1b: CLI Layer (inside `flowengine-cli`)
-
-CLI should be thin.
-
-Use:
-
-* dry-cli
-* tty-prompt
-
-NOTE: Dress up the CLI/Terminal interface a bit. Use as much of the TTY-Toolkit as needed.
-
-#### Commands
-
-```bash
-flowengine run config.rb
-flowengine graph config.rb --format=mermaid
-flowengine simulate config.rb --answers=fixture.json
-```
-
 ### Examples of Mermaid Charts
 
 ![Example](docs/flowengine-example.png)
