@@ -46,7 +46,7 @@ flowengine/
 Immutable structure representing flow graph.
 
 ```ruby
-flowengine.define do
+FlowEngine.define do
   start :earnings
 
   step :earnings do
@@ -67,7 +67,7 @@ No runtime state.
 #### Engine (Pure Runtime)
 
 ```ruby
-engine = flowengine::Engine.new(definition)
+engine = FlowEngine::Engine.new(definition)
 
 engine.current_step
 engine.answer(value)
