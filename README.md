@@ -1,9 +1,9 @@
 # Flowengine
 
 > [!IMPORTANT]
-> 
+>
 > Gem's Responsibilities
-> 
+>
 > * DSL
 > * Flow Definition
 > * AST-based Rule system
@@ -140,12 +140,13 @@ flowengine simulate config.rb --answers=fixture.json
 
 ### Examples of Mermaid Charts
 
+![Example](docs/flowengine-example.png)
+
+<details>
+  <summary>Expand to See Mermaid Sources</summary>
+
 ```mermaid
----
-config:
-  layout: dagre
----
-flowchart LR
+flowchart BT
     filing_status["What is your filing status for 2025?"] --> dependents["How many dependents do you have?"]
     dependents --> income_types["Select all income types that apply to you in 2025."]
     income_types -- Business in income_types --> business_count["How many total businesses do you own or are a part..."]
@@ -177,3 +178,5 @@ flowchart LR
 
     review@{ shape: rect}
 ```
+
+</details>
