@@ -14,7 +14,7 @@ Gem::Specification.new do |spec|
                      "runtime engine. No framework dependencies."
   spec.homepage = "https://github.com/kigster/flowengine"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 4.0.1"
 
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["homepage_uri"] = spec.homepage

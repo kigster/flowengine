@@ -48,8 +48,7 @@ COMPLEX_TAX_INTAKE = FlowEngine.define do
   step :business_count do
     type :number
     question "How many total businesses do you own or are a partner in?"
-    transition to: :complex_business_info,
-               if_rule: greater_than(:business_count, 2)
+    transition to: :complex_business_info, if_rule: greater_than(:business_count, 2)
     transition to: :business_details
   end
 
