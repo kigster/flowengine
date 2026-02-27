@@ -3,6 +3,7 @@
 require 'bundler/gem_tasks'
 require 'rspec/core/rake_task'
 require 'timeout'
+require 'yard'
 
 def shell(*args)
   puts "running: #{args.join(' ')}"
@@ -23,6 +24,12 @@ task permissions: [:clean] do
 end
 
 task build: :permissions
+
+YARD::Rake::YardocTask.new(:doc) do |t|
+  t.files = %w(lib/**/*.rb exe/*.rb - README.md LICENSE.txt)
+  t.options.unshift('--title', '"FlowEngine — DSL + AST for buildiong complex flows in Ruby."')
+  t.after = -> { exec('open doc/index.html') } if RUBY_PLATFORM =~ /darwin/
+end
 
 RSpec::Core::RakeTask.new(:spec)
 
