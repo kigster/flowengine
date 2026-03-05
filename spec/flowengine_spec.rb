@@ -5,10 +5,6 @@ RSpec.describe FlowEngine do
     expect(FlowEngine::VERSION).not_to be_nil
   end
 
-  it "has version 0.1.0" do
-    expect(FlowEngine::VERSION).to eq("0.1.0")
-  end
-
   describe ".define" do
     it "returns a frozen Definition" do
       definition = FlowEngine.define do

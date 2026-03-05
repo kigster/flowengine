@@ -12,6 +12,7 @@ module FlowEngine
         @fields = nil
         @transitions = []
         @visibility_rule = nil
+        @decorations = nil
       end
 
       def type(value)
@@ -30,6 +31,10 @@ module FlowEngine
         @fields = list
       end
 
+      def decorations(decorations)
+        @decorations = decorations
+      end
+
       def transition(to:, if_rule: nil)
         @transitions << Transition.new(target: to, rule: if_rule)
       end
@@ -46,7 +51,8 @@ module FlowEngine
           options: @options,
           fields: @fields,
           transitions: @transitions,
-          visibility_rule: @visibility_rule
+          visibility_rule: @visibility_rule,
+          decorations: @decorations
         )
       end
     end

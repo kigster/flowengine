@@ -4,10 +4,18 @@ module FlowEngine
   class Node
     attr_reader :id, :type, :question, :options, :fields, :transitions, :visibility_rule
 
-    def initialize(id:, type:, question:, options: nil, fields: nil, transitions: [], visibility_rule: nil)
+    def initialize(id:, # rubocop:disable Metrics/ParameterLists
+                   type:,
+                   question:,
+                   decorations: nil,
+                   options: nil,
+                   fields: nil,
+                   transitions: [],
+                   visibility_rule: nil)
       @id = id
       @type = type
       @question = question
+      @decorations = decorations
       @options = options&.freeze
       @fields = fields&.freeze
       @transitions = transitions.freeze

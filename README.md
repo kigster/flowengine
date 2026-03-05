@@ -2,6 +2,12 @@
 
 [![RSpec](https://github.com/kigster/flowengine/actions/workflows/rspec.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rspec.yml) [![RuboCop](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml)
 
+This gem is the foundation of collecting complex multi-branch information from a user using a flow definition written in Ruby DSL. It shouldn't take too long to learn the DSL even for a non-technical person.
+
+This gem does not have any UI or an interactive component. It is used as the foundation for additional gems that are built on top of this one, and provide various interactive interfaces for colleting information based on the DSL definition.
+
+The simplest way to see this in action is to use the companion gem [`flowengine-cli`](https://rubygems.org/gems/flowengine-cli), which, given the flow DSL will walk the user through the questioniare according to the DSL flow definition, but using terminal UI and ASCII-based flow.
+
 A declarative flow engine for building rules-driven wizards and intake forms in pure Ruby.
 
 FlowEngine lets you define multi-step flows as **directed graphs** with **conditional branching**, evaluate transitions using an **AST-based rule system**, and collect structured answers through a **stateful runtime engine** — all without framework dependencies.
@@ -85,33 +91,13 @@ engine.history
 # => [:name, :age, :thanks]
 ```
 
+### Using the `flowengine-cli` gem to Generate the JSON Answers File
+
+
+
 ## Architecture
 
-```
-                 +-------------------+
-                 |    FlowEngine     |
-                 |-------------------|
-                 | DSL               |
-                 | Definition        |
-                 | Node              |
-                 | Transition        |
-                 | Rules (AST)       |
-                 | Evaluator         |
-                 | Engine            |
-                 | Validation layer  |
-                 | Graph Exporter    |
-                 +-------------------+
-                          ^
-            +-------------+-------------+
-            |                           |
-+------------------------+   +---------------------------+
-| flowengine-cli         |   | flowengine-rails          |
-|------------------------|   |---------------------------|
-| TTY UI adapter         |   | Rails Engine              |
-| JSON output            |   | ActiveRecord persistence  |
-| Mermaid export         |   | Web views/components      |
-+------------------------+   +---------------------------+
-```
+![architecture](docs/floweingine-architecture.png)
 
 The core has **zero UI logic**, **zero DB logic**, and **zero framework dependencies**. Adapters translate input/output, persist state, and render UI.
 
