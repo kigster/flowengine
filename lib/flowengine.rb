@@ -26,4 +26,14 @@ module FlowEngine
     builder.instance_eval(&)
     builder.build
   end
+
+  def self.load_dsl(text)
+    # rubocop:disable Security/Eval
+    eval(text, TOPLEVEL_BINDING.dup, "(dsl)", 1)
+    # rubocop:enable Security/Eval
+  rescue SyntaxError => e
+    raise DefinitionError, "DSL syntax error: #{e.message}"
+  rescue StandardError => e
+    raise DefinitionError, "DSL evaluation error: #{e.message}"
+  end
 end
