@@ -2,6 +2,10 @@ set shell := ["bash", "-c"]
 
 set dotenv-load
 
+[no-exit-message]
+recipes:
+    @just --choose
+
 test:
     @bundle exec rspec
     @bundle exec rubocop
