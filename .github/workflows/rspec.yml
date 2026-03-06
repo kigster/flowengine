@@ -25,7 +25,6 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-
       - name: Install Gems
         run: bundle install -j 4
 
