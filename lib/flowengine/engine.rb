@@ -1,9 +1,18 @@
 # frozen_string_literal: true
 
 module FlowEngine
+  # Runtime session that drives flow navigation: holds definition, answers, and current step.
+  # Validates each answer via an optional {Validation::Adapter}, then advances using node transitions.
+  #
+  # @attr_reader definition [Definition] immutable flow definition
+  # @attr_reader answers [Hash] step_id => value (mutable as user answers)
+  # @attr_reader history [Array<Symbol>] ordered list of step ids visited (including current)
+  # @attr_reader current_step_id [Symbol, nil] current step id, or nil when flow is finished
   class Engine
     attr_reader :definition, :answers, :history, :current_step_id
 
+    # @param definition [Definition] the flow to run
+    # @param validator [Validation::Adapter] validator for step answers (default: {Validation::NullAdapter})
     def initialize(definition, validator: Validation::NullAdapter.new)
       @definition = definition
       @answers = {}
@@ -13,16 +22,23 @@ module FlowEngine
       @history << @current_step_id
     end
 
+    # @return [Node, nil] current step node, or nil if flow is finished
     def current_step
       return nil if finished?
 
       definition.step(@current_step_id)
     end
 
+    # @return [Boolean] true when there is no current step (flow ended)
     def finished?
       @current_step_id.nil?
     end
 
+    # Submits an answer for the current step, validates it, stores it, and advances to the next step.
+    #
+    # @param value [Object] user's answer for the current step
+    # @raise [AlreadyFinishedError] if the flow has already finished
+    # @raise [ValidationError] if the validator rejects the value
     def answer(value)
       raise AlreadyFinishedError, "Flow is already finished" if finished?
 
@@ -33,6 +49,9 @@ module FlowEngine
       advance_step
     end
 
+    # Serializable state for persistence or resumption.
+    #
+    # @return [Hash] current_step_id, answers, and history (string/symbol keys as stored)
     def to_state
       {
         current_step_id: @current_step_id,
@@ -41,6 +60,12 @@ module FlowEngine
       }
     end
 
+    # Rebuilds an engine from a previously saved state (e.g. from DB or session).
+    #
+    # @param definition [Definition] same definition used when state was captured
+    # @param state_hash [Hash] hash with :current_step_id, :answers, :history (keys may be strings)
+    # @param validator [Validation::Adapter] validator to use (default: NullAdapter)
+    # @return [Engine] restored engine instance
     def self.from_state(definition, state_hash, validator: Validation::NullAdapter.new)
       state = symbolize_state(state_hash)
       engine = allocate
@@ -48,6 +73,10 @@ module FlowEngine
       engine
     end
 
+    # Normalizes a state hash so step ids and history entries are symbols; answers keys are symbols.
+    #
+    # @param hash [Hash] raw state (e.g. from JSON)
+    # @return [Hash] symbolized state
     def self.symbolize_state(hash)
       return hash unless hash.is_a?(Hash)
 
@@ -66,6 +95,8 @@ module FlowEngine
       end
     end
 
+    # @param answers [Hash] answers map (keys may be strings)
+    # @return [Hash] same map with symbol keys
     def self.symbolize_answers(answers)
       return {} unless answers.is_a?(Hash)
 
