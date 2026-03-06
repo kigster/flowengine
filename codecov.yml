@@ -1,0 +1,33 @@
+codecov:
+  ci:
+  - github.com
+  disable_default_path_fixes: false
+  max_report_age: 24
+  notify:
+    after_n_builds: 1
+    wait_for_ci: true
+  require_ci_to_pass: true
+coverage:
+  precision: 2
+  range:
+  - 50.0
+  - 75.0
+  round: down
+  status:
+    patch: false
+    project:
+      flowengine:
+        base: auto
+        flags:
+        - rspecs
+        if_ci_failed: ignore
+        informational: true
+        only_pulls: false
+        paths:
+        - ^lib.*
+        removed_code_behavior: false
+        target: 80.0
+        threshold: 5.0
+github_checks:
+  annotations: true
+
