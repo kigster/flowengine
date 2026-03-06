@@ -8,10 +8,12 @@ This gem does not have any UI or an interactive component. It is used as the fou
 
 The simplest way to see this in action is to use the companion gem [`flowengine-cli`](https://rubygems.org/gems/flowengine-cli), which, given the flow DSL will walk the user through the questioniare according to the DSL flow definition, but using terminal UI and ASCII-based flow.
 
-A declarative flow engine for building rules-driven wizards and intake forms in pure Ruby.
+**A slightly different explanation is that it offere a declarative flow engine for building rules-driven wizards and intake forms in pure Ruby.**
 
-FlowEngine lets you define multi-step flows as **directed graphs** with **conditional branching**, evaluate transitions using an **AST-based rule system**, and collect structured answers through a **stateful runtime engine** — all without framework dependencies.
+> [!NOTE]
+> FlowEngine lets you define multi-step flows as **directed graphs** with **conditional branching**, evaluate transitions using an **AST-based rule system**, and collect structured answers through a **stateful runtime engine** — all without framework dependencies.
 
+> [!CAUTION]
 > **This is not a form builder.** It's a *Form Definition Engine* that separates flow logic, data schema, and UI rendering into independent concerns.
 
 ## Installation
