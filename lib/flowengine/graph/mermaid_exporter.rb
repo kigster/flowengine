@@ -2,15 +2,22 @@
 
 module FlowEngine
   module Graph
+    # Exports a flow {Definition} to Mermaid flowchart syntax for visualization.
+    # Nodes are labeled with truncated question text; edges show condition labels when present.
     class MermaidExporter
+      # Maximum characters for node labels in the diagram (longer text is truncated with "...").
       MAX_LABEL_LENGTH = 50
 
       attr_reader :definition
 
+      # @param definition [Definition] flow to export
       def initialize(definition)
         @definition = definition
       end
 
+      # Generates Mermaid flowchart TD (top-down) source.
+      #
+      # @return [String] Mermaid diagram source (e.g. for Mermaid.js or docs)
       def export
         lines = ["flowchart TD"]
 

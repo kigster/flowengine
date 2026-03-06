@@ -36,6 +36,11 @@ format:
 lint: 
     @bundle exec rubocop
 
+# Generates library documentation into ./doc folder and opens the browser
+doc:
+    @bundle exec rake doc
+    @open ./doc/index.html
+
 
 check-all: lint test
 
