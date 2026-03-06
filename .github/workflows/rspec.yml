@@ -26,4 +26,5 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       - name: Run RSpecs
-        run: bundle exec rspec --format documentation
+        run: bundle exec rspec --format documentation -p 2
+      - uses: codecov/codecov-action@v4
