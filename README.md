@@ -144,9 +144,13 @@ end
 ### Using the Introduction at Runtime
 
 ```ruby
-# 1. Configure an LLM adapter and client
-adapter = FlowEngine::LLM::OpenAIAdapter.new(api_key: ENV["OPENAI_API_KEY"])
-client = FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-4o-mini")
+# 1. Auto-detect adapter from environment (checks ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY)
+client = FlowEngine::LLM.auto_client
+
+# Or explicitly choose a provider:
+# client = FlowEngine::LLM.auto_client(anthropic_api_key: "sk-ant-...")
+# client = FlowEngine::LLM.auto_client(openai_api_key: "sk-...", model: "gpt-4o")
+# client = FlowEngine::LLM.auto_client(gemini_api_key: "AIza...")
 
 # 2. Create the engine and submit the introduction
 engine = FlowEngine::Engine.new(definition)
@@ -185,10 +189,18 @@ engine.submit_introduction("My SSN is 123-45-6789", llm_client: client)
 
 ### Custom LLM Adapters
 
-The LLM integration uses an adapter pattern. The gem ships with an OpenAI adapter (via the [`ruby_llm`](https://github.com/crmne/ruby_llm) gem), but you can create adapters for any provider:
+The LLM integration uses an adapter pattern. The gem ships with three adapters (all via the [`ruby_llm`](https://github.com/crmne/ruby_llm) gem):
+
+| Adapter | Env Variable | Default Model |
+|---------|-------------|---------------|
+| `AnthropicAdapter` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
+| `OpenAIAdapter` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| `GeminiAdapter` | `GEMINI_API_KEY` | `gemini-2.0-flash` |
+
+You can also create adapters for any other provider:
 
 ```ruby
-class MyAnthropicAdapter < FlowEngine::LLM::Adapter
+class MyCustomAdapter < FlowEngine::LLM::Adapter
   def initialize(api_key:)
     super()
     @api_key = api_key
@@ -200,8 +212,8 @@ class MyAnthropicAdapter < FlowEngine::LLM::Adapter
   end
 end
 
-adapter = MyAnthropicAdapter.new(api_key: ENV["ANTHROPIC_API_KEY"])
-client = FlowEngine::LLM::Client.new(adapter: adapter, model: "claude-sonnet-4-20250514")
+adapter = MyCustomAdapter.new(api_key: ENV["MY_API_KEY"])
+client = FlowEngine::LLM::Client.new(adapter: adapter, model: "my-model")
 ```
 
 ### State Persistence
@@ -236,8 +248,11 @@ The core has **zero UI logic**, **zero DB logic**, and **zero framework dependen
 | `Engine` | Stateful runtime: tracks current step, answers, history, and introduction |
 | `Validation::Adapter` | Interface for pluggable validation (dry-validation, JSON Schema, etc.) |
 | `LLM::Adapter` | Abstract interface for LLM API calls |
+| `LLM::AnthropicAdapter` | Anthropic/Claude implementation via `ruby_llm` gem |
 | `LLM::OpenAIAdapter` | OpenAI implementation via `ruby_llm` gem |
+| `LLM::GeminiAdapter` | Google Gemini implementation via `ruby_llm` gem |
 | `LLM::Client` | High-level: builds prompt, calls adapter, parses JSON response |
+| `LLM.auto_client` | Factory: auto-detects provider from environment API keys |
 | `LLM::SensitiveDataFilter` | Rejects text containing SSN, ITIN, EIN patterns |
 | `Graph::MermaidExporter` | Exports the flow definition as a Mermaid diagram |
 

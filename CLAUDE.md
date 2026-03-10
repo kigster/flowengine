@@ -48,6 +48,8 @@ lib/flowengine/
   llm/
     adapter.rb               # Abstract LLM adapter interface
     openai_adapter.rb        # OpenAI adapter via ruby_llm gem
+    anthropic_adapter.rb     # Anthropic/Claude adapter via ruby_llm gem
+    gemini_adapter.rb        # Google Gemini adapter via ruby_llm gem
     client.rb                # High-level LLM client (prompt building + response parsing)
     system_prompt_builder.rb # Builds system prompt from Definition + static template
     sensitive_data_filter.rb # Rejects SSN, ITIN, EIN patterns
@@ -84,6 +86,8 @@ spec/
 | `Validation::Adapter` | Abstract validator interface | - |
 | `LLM::Adapter` | Abstract LLM adapter: `chat(system_prompt:, user_prompt:, model:)` | - |
 | `LLM::OpenAIAdapter` | OpenAI adapter via ruby_llm gem | - |
+| `LLM::AnthropicAdapter` | Anthropic/Claude adapter via ruby_llm gem | - |
+| `LLM::GeminiAdapter` | Google Gemini adapter via ruby_llm gem | - |
 | `LLM::Client` | High-level: builds prompt, calls adapter, parses JSON response | - |
 | `LLM::SystemPromptBuilder` | Builds system prompt from Definition + static template | - |
 | `LLM::SensitiveDataFilter` | Rejects text containing SSN, ITIN, EIN patterns | - |
@@ -256,8 +260,12 @@ The introduction config is stored on `Definition#introduction` (an `Introduction
 ### Engine Integration
 
 ```ruby
-adapter = FlowEngine::LLM::OpenAIAdapter.new(api_key: ENV["OPENAI_API_KEY"])
-client = FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-4o-mini")
+# Auto-detect adapter from environment (checks ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY)
+client = FlowEngine::LLM.auto_client
+
+# Or explicitly choose a provider:
+adapter = FlowEngine::LLM::AnthropicAdapter.new(api_key: ENV["ANTHROPIC_API_KEY"])
+client = FlowEngine::LLM::Client.new(adapter: adapter, model: "claude-sonnet-4-20250514")
 
 engine = FlowEngine::Engine.new(definition)
 engine.submit_introduction("I am married with 2 kids, W2 income", llm_client: client)
@@ -276,14 +284,26 @@ engine.introduction_text # => "I am married with 2 kids, W2 income"
 ### LLM Adapter Pattern
 
 ```ruby
+# Auto-detect: picks the first available key (Anthropic > OpenAI > Gemini)
+client = FlowEngine::LLM.auto_client
+
+# Or with explicit keys / model override:
+client = FlowEngine::LLM.auto_client(anthropic_api_key: "sk-...", model: "claude-haiku-4-5-20251001")
+
 # Abstract adapter — subclass and implement #chat
 FlowEngine::LLM::Adapter
+
+# Anthropic via ruby_llm gem (requires ANTHROPIC_API_KEY env var or explicit key)
+FlowEngine::LLM::AnthropicAdapter.new(api_key: "sk-ant-...")
 
 # OpenAI via ruby_llm gem (requires OPENAI_API_KEY env var or explicit key)
 FlowEngine::LLM::OpenAIAdapter.new(api_key: "sk-...")
 
+# Google Gemini via ruby_llm gem (requires GEMINI_API_KEY env var or explicit key)
+FlowEngine::LLM::GeminiAdapter.new(api_key: "AIza...")
+
 # Client wraps adapter + model
-FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-4o-mini")
+FlowEngine::LLM::Client.new(adapter: adapter, model: "claude-sonnet-4-20250514")
 ```
 
 ### Adding a New LLM Adapter
