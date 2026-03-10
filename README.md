@@ -37,6 +37,9 @@ require "flowengine"
 
 # 1. Define a flow
 definition = FlowEngine.define do
+  introduction label: "What are your favorite cocktails?",
+               placeholder: "Old Fashion, Whisky Sour, etc",
+               maxlength: 2000
   start :name
 
   step :name do
