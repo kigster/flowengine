@@ -41,6 +41,12 @@ doc:
     @bundle exec rake doc
     @open ./doc/index.html
 
+clean:
+    @rm -rf pkg
+    @rm -rf coverage
+
+release:
+    @bundle exec rake release
 
 check-all: lint test
 

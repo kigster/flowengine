@@ -49,5 +49,15 @@ RSpec.describe FlowEngine::DSL::StepBuilder do
       expect(node.transitions.first.rule).to be_nil
       expect(node.transitions.first.condition_label).to eq("always")
     end
+
+    it "creates a Node with hash options (key => label)" do
+      builder.type :single_select
+      builder.question "Filing status?"
+      builder.options({ "single" => "Single", "mfj" => "Married Filing Jointly" })
+
+      node = builder.build(:filing_status)
+      expect(node.options).to eq(%w[single mfj])
+      expect(node.option_labels).to eq("single" => "Single", "mfj" => "Married Filing Jointly")
+    end
   end
 end

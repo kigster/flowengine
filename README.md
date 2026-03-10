@@ -1,6 +1,6 @@
 # FlowEngine
 
-[![RSpec](https://github.com/kigster/flowengine/actions/workflows/rspec.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rspec.yml) [![RuboCop](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml)
+[![RSpec](https://github.com/kigster/flowengine/actions/workflows/rspec.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rspec.yml) &nbsp; [![RuboCop](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml) &nbsp; ![Coverage](docs/badges/coverage_badge.svg)
 
 This gem is the foundation of collecting complex multi-branch information from a user using a flow definition written in Ruby DSL. It shouldn't take too long to learn the DSL even for a non-technical person.
 
@@ -95,7 +95,123 @@ engine.history
 
 ### Using the `flowengine-cli` gem to Generate the JSON Answers File
 
+## LLM-parsed Introduction
 
+FlowEngine supports an optional **introduction step** that collects free-form text from the user before the structured flow begins. An LLM parses this text to pre-fill answers, automatically skipping steps the user already answered in their introduction.
+
+### Defining an Introduction
+
+Add the `introduction` command to your flow definition:
+
+```ruby
+definition = FlowEngine.define do
+  start :filing_status
+
+  introduction label: "Tell us about your tax situation",
+               placeholder: "e.g. I am married, filing jointly, with 2 dependents...",
+               maxlength: 2000  # optional character limit
+
+  step :filing_status do
+    type :single_select
+    question "What is your filing status?"
+    options %w[single married_filing_jointly head_of_household]
+    transition to: :dependents
+  end
+
+  step :dependents do
+    type :number
+    question "How many dependents?"
+    transition to: :income_types
+  end
+
+  step :income_types do
+    type :multi_select
+    question "Select income types"
+    options %w[W2 1099 Business Investment]
+  end
+end
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `label` | Yes | Text shown above the input field |
+| `placeholder` | No | Ghost text inside the text area (default: `""`) |
+| `maxlength` | No | Maximum character count (default: `nil` = unlimited) |
+
+### Using the Introduction at Runtime
+
+```ruby
+# 1. Configure an LLM adapter and client
+adapter = FlowEngine::LLM::OpenAIAdapter.new(api_key: ENV["OPENAI_API_KEY"])
+client = FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-4o-mini")
+
+# 2. Create the engine and submit the introduction
+engine = FlowEngine::Engine.new(definition)
+engine.submit_introduction(
+  "I am married filing jointly with 2 dependents, W2 and business income",
+  llm_client: client
+)
+
+# 3. The LLM pre-fills answers and the engine auto-advances
+engine.answers
+# => { filing_status: "married_filing_jointly", dependents: 2,
+#      income_types: ["W2", "Business"] }
+
+engine.current_step_id    # => nil (all steps pre-filled in this case)
+engine.introduction_text  # => "I am married filing jointly with 2 dependents, ..."
+engine.finished?          # => true
+```
+
+If the LLM can only extract some answers, the engine stops at the first unanswered step and the user continues the flow normally from there.
+
+### Sensitive Data Protection
+
+Before any text reaches the LLM, `submit_introduction` scans for sensitive data patterns:
+
+- **SSN**: `123-45-6789`
+- **ITIN**: `912-34-5678`
+- **EIN**: `12-3456789`
+- **Nine consecutive digits**: `123456789`
+
+If detected, a `FlowEngine::SensitiveDataError` is raised immediately. The introduction text is discarded and no LLM call is made.
+
+```ruby
+engine.submit_introduction("My SSN is 123-45-6789", llm_client: client)
+# => raises FlowEngine::SensitiveDataError
+```
+
+### Custom LLM Adapters
+
+The LLM integration uses an adapter pattern. The gem ships with an OpenAI adapter (via the [`ruby_llm`](https://github.com/crmne/ruby_llm) gem), but you can create adapters for any provider:
+
+```ruby
+class MyAnthropicAdapter < FlowEngine::LLM::Adapter
+  def initialize(api_key:)
+    super()
+    @api_key = api_key
+  end
+
+  def chat(system_prompt:, user_prompt:, model:)
+    # Call your LLM API here
+    # Must return the response text (expected to be a JSON string)
+  end
+end
+
+adapter = MyAnthropicAdapter.new(api_key: ENV["ANTHROPIC_API_KEY"])
+client = FlowEngine::LLM::Client.new(adapter: adapter, model: "claude-sonnet-4-20250514")
+```
+
+### State Persistence
+
+The `introduction_text` is included in state serialization:
+
+```ruby
+state = engine.to_state
+# => { current_step_id: ..., answers: { ... }, history: [...], introduction_text: "..." }
+
+restored = FlowEngine::Engine.from_state(definition, state)
+restored.introduction_text  # => "I am married filing jointly..."
+```
 
 ## Architecture
 
@@ -108,13 +224,18 @@ The core has **zero UI logic**, **zero DB logic**, and **zero framework dependen
 | Component | Responsibility |
 |-----------|---------------|
 | `FlowEngine.define` | DSL entry point; returns a frozen `Definition` |
-| `Definition` | Immutable container of the flow graph (nodes + start step) |
+| `Introduction` | Immutable config for the introduction step (label, placeholder, maxlength) |
+| `Definition` | Immutable container of the flow graph (nodes + start step + introduction) |
 | `Node` | A single step: type, question, options/fields, transitions, visibility |
 | `Transition` | A directed edge with an optional rule condition |
 | `Rules::*` | AST nodes for conditional logic (`Contains`, `Equals`, `All`, etc.) |
 | `Evaluator` | Evaluates rules against the current answer store |
-| `Engine` | Stateful runtime: tracks current step, answers, and history |
+| `Engine` | Stateful runtime: tracks current step, answers, history, and introduction |
 | `Validation::Adapter` | Interface for pluggable validation (dry-validation, JSON Schema, etc.) |
+| `LLM::Adapter` | Abstract interface for LLM API calls |
+| `LLM::OpenAIAdapter` | OpenAI implementation via `ruby_llm` gem |
+| `LLM::Client` | High-level: builds prompt, calls adapter, parses JSON response |
+| `LLM::SensitiveDataFilter` | Rejects text containing SSN, ITIN, EIN patterns |
 | `Graph::MermaidExporter` | Exports the flow definition as a Mermaid diagram |
 
 ## The DSL
@@ -126,6 +247,11 @@ Every flow starts with `FlowEngine.define`, which returns a **frozen, immutable*
 ```ruby
 definition = FlowEngine.define do
   start :first_step     # Required: which node to begin at
+
+  # Optional: collect free-form text before the flow, parsed by LLM
+  introduction label: "Describe your situation",
+               placeholder: "Type here...",
+               maxlength: 2000
 
   step :first_step do
     # step configuration...
@@ -311,9 +437,11 @@ engine = FlowEngine::Engine.new(definition)
 | `engine.current_step_id` | `Symbol` or `nil` | The ID of the current step |
 | `engine.current_step` | `Node` or `nil` | The current Node object |
 | `engine.answer(value)` | `nil` | Records the answer and advances |
+| `engine.submit_introduction(text, llm_client:)` | `nil` | LLM-parses text, pre-fills answers, auto-advances |
 | `engine.finished?` | `Boolean` | `true` when there are no more steps |
 | `engine.answers` | `Hash` | All collected answers `{ step_id => value }` |
 | `engine.history` | `Array<Symbol>` | Ordered list of visited step IDs |
+| `engine.introduction_text` | `String` or `nil` | The raw introduction text submitted |
 | `engine.definition` | `Definition` | The immutable flow definition |
 
 ### Error Handling
@@ -336,6 +464,18 @@ FlowEngine.define do
   end
 end
 # => raises FlowEngine::DefinitionError
+
+# Sensitive data in introduction
+engine.submit_introduction("My SSN is 123-45-6789", llm_client: client)
+# => raises FlowEngine::SensitiveDataError
+
+# Introduction exceeds maxlength
+engine.submit_introduction("A" * 3000, llm_client: client)
+# => raises FlowEngine::ValidationError
+
+# Missing API key or LLM response parsing failure
+FlowEngine::LLM::OpenAIAdapter.new  # without OPENAI_API_KEY
+# => raises FlowEngine::LLMError
 ```
 
 ## Validation
@@ -896,7 +1036,7 @@ FlowEngine is the core of a three-gem architecture:
 
 | Gem | Purpose |
 |-----|---------|
-| **`flowengine`** (this gem) | Core engine — pure Ruby, no Rails, no DB, no UI |
+| **`flowengine`** (this gem) | Core engine + LLM introduction parsing (depends on `ruby_llm`) |
 | **`flowengine-cli`** | Terminal wizard adapter using [TTY Toolkit](https://ttytoolkit.org/) + Dry::CLI |
 | **`flowengine-rails`** | Rails Engine with ActiveRecord persistence and web views |
 

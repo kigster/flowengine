@@ -13,12 +13,14 @@ require_relative "flowengine/rules/any"
 require_relative "flowengine/evaluator"
 require_relative "flowengine/transition"
 require_relative "flowengine/node"
+require_relative "flowengine/introduction"
 require_relative "flowengine/definition"
 require_relative "flowengine/validation/adapter"
 require_relative "flowengine/validation/null_adapter"
 require_relative "flowengine/engine"
 require_relative "flowengine/dsl"
 require_relative "flowengine/graph/mermaid_exporter"
+require_relative "flowengine/llm"
 
 # Declarative flow definition and execution engine for wizards, intake forms, and
 # multi-step decision graphs. Separates flow logic, data schema, and UI rendering.

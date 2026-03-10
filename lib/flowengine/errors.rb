@@ -18,4 +18,10 @@ module FlowEngine
 
   # Raised when the validator rejects the user's answer for the current step.
   class ValidationError < EngineError; end
+
+  # Raised for LLM-related errors (missing API key, response parsing, etc.).
+  class LLMError < Error; end
+
+  # Raised when introduction text contains sensitive data (SSN, ITIN, EIN, etc.).
+  class SensitiveDataError < EngineError; end
 end

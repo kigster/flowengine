@@ -8,8 +8,9 @@ module FlowEngine
   # @attr_reader answers [Hash] step_id => value (mutable as user answers)
   # @attr_reader history [Array<Symbol>] ordered list of step ids visited (including current)
   # @attr_reader current_step_id [Symbol, nil] current step id, or nil when flow is finished
+  # @attr_reader introduction_text [String, nil] free-form text submitted before the flow began
   class Engine
-    attr_reader :definition, :answers, :history, :current_step_id
+    attr_reader :definition, :answers, :history, :current_step_id, :introduction_text
 
     # @param definition [Definition] the flow to run
     # @param validator [Validation::Adapter] validator for step answers (default: {Validation::NullAdapter})
@@ -19,6 +20,7 @@ module FlowEngine
       @history = []
       @current_step_id = definition.start_step_id
       @validator = validator
+      @introduction_text = nil
       @history << @current_step_id
     end
 
@@ -49,14 +51,32 @@ module FlowEngine
       advance_step
     end
 
+    # Submits free-form introduction text, filters sensitive data, calls the LLM
+    # to extract answers, and auto-advances through pre-filled steps.
+    #
+    # @param text [String] user's free-form introduction
+    # @param llm_client [LLM::Client] configured LLM client for parsing
+    # @raise [SensitiveDataError] if text contains SSN, ITIN, EIN, etc.
+    # @raise [ValidationError] if text exceeds the introduction maxlength
+    # @raise [LLMError] on LLM communication or parsing failures
+    def submit_introduction(text, llm_client:)
+      validate_introduction_length!(text)
+      LLM::SensitiveDataFilter.check!(text)
+      @introduction_text = text
+      extracted = llm_client.parse_introduction(definition: @definition, introduction_text: text)
+      @answers.merge!(extracted)
+      auto_advance_prefilled
+    end
+
     # Serializable state for persistence or resumption.
     #
-    # @return [Hash] current_step_id, answers, and history (string/symbol keys as stored)
+    # @return [Hash] current_step_id, answers, history, and introduction_text
     def to_state
       {
         current_step_id: @current_step_id,
         answers: @answers,
-        history: @history
+        history: @history,
+        introduction_text: @introduction_text
       }
     end
 
@@ -115,6 +135,7 @@ module FlowEngine
       @current_step_id = state[:current_step_id]
       @answers = state[:answers] || {}
       @history = state[:history] || []
+      @introduction_text = state[:introduction_text]
     end
 
     def advance_step
@@ -123,6 +144,20 @@ module FlowEngine
 
       @current_step_id = next_id
       @history << next_id if next_id
+    end
+
+    def validate_introduction_length!(text)
+      maxlength = @definition.introduction&.maxlength
+      return unless maxlength
+      return if text.length <= maxlength
+
+      raise ValidationError, "Introduction text exceeds maxlength (#{text.length}/#{maxlength})"
+    end
+
+    # Advances through consecutive steps that already have pre-filled answers.
+    # Stops at the first step without a pre-filled answer or when the flow ends.
+    def auto_advance_prefilled
+      advance_step while @current_step_id && @answers.key?(@current_step_id)
     end
   end
 end

@@ -7,14 +7,16 @@ module FlowEngine
   # @attr_reader start_step_id [Symbol] id of the first step in the flow
   # @attr_reader steps [Hash<Symbol, Node>] frozen map of step id => node (read-only)
   class Definition
-    attr_reader :start_step_id, :steps
+    attr_reader :start_step_id, :steps, :introduction
 
     # @param start_step_id [Symbol] id of the initial step
     # @param nodes [Hash<Symbol, Node>] all steps keyed by id
+    # @param introduction [Introduction, nil] optional introduction config (label + placeholder)
     # @raise [DefinitionError] if start_step_id is not present in nodes
-    def initialize(start_step_id:, nodes:)
+    def initialize(start_step_id:, nodes:, introduction: nil)
       @start_step_id = start_step_id
       @steps = nodes.freeze
+      @introduction = introduction
       validate!
       freeze
     end

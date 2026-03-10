@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe FlowEngine::Node do
-  describe "basic node" do
+  describe "basic node with array options" do
     subject(:node) do
       described_class.new(
         id: :earnings,
@@ -15,6 +15,7 @@ RSpec.describe FlowEngine::Node do
     its(:type) { is_expected.to eq(:multi_select) }
     its(:question) { is_expected.to eq("What are your main earnings?") }
     its(:options) { is_expected.to eq(%w[W2 1099 BusinessOwnership]) }
+    its(:option_labels) { is_expected.to be_nil }
     its(:fields) { is_expected.to be_nil }
     its(:transitions) { is_expected.to eq([]) }
     its(:visibility_rule) { is_expected.to be_nil }
@@ -29,6 +30,56 @@ RSpec.describe FlowEngine::Node do
 
     it "has frozen transitions" do
       expect(node.transitions).to be_frozen
+    end
+  end
+
+  describe "node with hash options" do
+    subject(:node) do
+      described_class.new(
+        id: :filing_status,
+        type: :single_select,
+        question: "Filing status?",
+        options: {
+          "single" => "Single",
+          "mfj" => "Married Filing Jointly",
+          "hoh" => "Head of Household"
+        }
+      )
+    end
+
+    its(:options) { is_expected.to eq(%w[single mfj hoh]) }
+
+    it "has frozen options" do
+      expect(node.options).to be_frozen
+    end
+
+    it "has option_labels as a hash" do
+      expect(node.option_labels).to eq(
+        "single" => "Single",
+        "mfj" => "Married Filing Jointly",
+        "hoh" => "Head of Household"
+      )
+    end
+
+    it "has frozen option_labels" do
+      expect(node.option_labels).to be_frozen
+    end
+  end
+
+  describe "node with symbol-keyed hash options" do
+    subject(:node) do
+      described_class.new(
+        id: :color,
+        type: :single_select,
+        question: "Pick a color",
+        options: { red: "Red (#FF0000)", blue: "Blue (#0000FF)" }
+      )
+    end
+
+    its(:options) { is_expected.to eq(%w[red blue]) }
+
+    it "stringifies keys in option_labels" do
+      expect(node.option_labels).to eq("red" => "Red (#FF0000)", "blue" => "Blue (#0000FF)")
     end
   end
 
