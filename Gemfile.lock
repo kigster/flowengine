@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    flowengine (0.2.1)
+    flowengine (0.3.0)
       ruby_llm
 
 GEM
