@@ -31,6 +31,14 @@ RSpec.describe FlowEngine::LLM::Client do
     end
   end
 
+  describe "#to_s" do
+    it "includes class name, adapter, and model" do
+      text = client.to_s
+      expect(text).to include("FlowEngine::LLM::Client")
+      expect(text).to include("gpt-4o-mini")
+    end
+  end
+
   describe "#parse_introduction" do
     context "when LLM returns valid JSON" do
       before do

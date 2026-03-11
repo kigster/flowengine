@@ -42,6 +42,21 @@ RSpec.describe FlowEngine::LLM::Adapters::AnthropicAdapter do
     end
   end
 
+  describe "#inspect" do
+    subject(:adapter) { described_class.new(api_key: "sk-ant-test-key") }
+
+    it "includes vendor, model, and qualifier" do
+      text = adapter.inspect
+      expect(text).to include("vendor=anthropic")
+      expect(text).to include("model=claude-sonnet-4-6")
+      expect(text).to include("qualifier=default")
+    end
+
+    it "is aliased as to_s" do
+      expect(adapter.to_s).to eq(adapter.inspect)
+    end
+  end
+
   describe "#chat" do
     subject(:adapter) { described_class.new(api_key: "sk-ant-test-key") }
 

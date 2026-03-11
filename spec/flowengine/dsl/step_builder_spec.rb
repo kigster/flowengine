@@ -50,6 +50,25 @@ RSpec.describe FlowEngine::DSL::StepBuilder do
       expect(node.transitions.first.condition_label).to eq("always")
     end
 
+    it "creates a Node with decorations" do
+      builder.type :text
+      builder.question "Tell us about yourself"
+      builder.decorations({ hint: "Be detailed", icon: "pencil" })
+
+      node = builder.build(:intro)
+      expect(node).to be_frozen
+    end
+
+    it "creates an ai_intake Node with max_clarifications" do
+      builder.type :ai_intake
+      builder.question "Describe your situation"
+      builder.max_clarifications 5
+
+      node = builder.build(:intake)
+      expect(node.ai_intake?).to be true
+      expect(node.max_clarifications).to eq(5)
+    end
+
     it "creates a Node with hash options (key => label)" do
       builder.type :single_select
       builder.question "Filing status?"
