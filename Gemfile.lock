@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    flowengine (0.3.0)
+    flowengine (0.3.1)
       ruby_llm
       zeitwerk
 
