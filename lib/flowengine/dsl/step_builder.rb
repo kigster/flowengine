@@ -15,6 +15,7 @@ module FlowEngine
         @transitions = []
         @visibility_rule = nil
         @decorations = nil
+        @max_clarifications = 0
       end
 
       # Sets the step/input type (e.g. :multi_select, :number_matrix).
@@ -62,6 +63,13 @@ module FlowEngine
         @visibility_rule = rule
       end
 
+      # Sets the maximum number of clarification rounds for an :ai_intake step.
+      #
+      # @param count [Integer] max follow-up rounds (0 = one-shot, no clarifications)
+      def max_clarifications(count)
+        @max_clarifications = count
+      end
+
       # Builds the {Node} for the given step id from accumulated attributes.
       #
       # @param id [Symbol] step id
@@ -75,7 +83,8 @@ module FlowEngine
           fields: @fields,
           transitions: @transitions,
           visibility_rule: @visibility_rule,
-          decorations: @decorations
+          decorations: @decorations,
+          max_clarifications: @max_clarifications
         )
       end
     end
