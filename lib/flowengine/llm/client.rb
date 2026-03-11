@@ -34,6 +34,31 @@ module FlowEngine
         parse_response(response_text, definition)
       end
 
+      # Sends user text to the LLM for an AI intake step and returns both
+      # extracted answers and an optional follow-up question.
+      #
+      # @param definition [Definition] flow definition
+      # @param user_text [String] user's free-form text
+      # @param answered [Hash<Symbol, Object>] already-answered steps
+      # @param conversation_history [Array<Hash>] prior rounds [{role:, text:}]
+      # @return [Hash] { answers: Hash<Symbol, Object>, follow_up: String|nil }
+      # @raise [Errors::LLMError] on response parsing failures
+      def parse_ai_intake(definition:, user_text:, answered: {}, conversation_history: [])
+        system_prompt = IntakePromptBuilder.new(
+          definition,
+          answered: answered,
+          conversation_history: conversation_history
+        ).build
+
+        response_text = adapter.chat(
+          system_prompt: system_prompt,
+          user_prompt: user_text,
+          model: model
+        )
+
+        parse_intake_response(response_text, definition)
+      end
+
       def to_s
         "#<#{self.class.name} adapter=#{adapter} model=#{model}>"
       end
@@ -73,6 +98,23 @@ module FlowEngine
         else
           value
         end
+      end
+
+      def parse_intake_response(text, definition)
+        json_str = extract_json(text)
+        raw = JSON.parse(json_str, symbolize_names: true)
+
+        answers_raw = raw[:answers] || {}
+        answers = answers_raw.each_with_object({}) do |(step_id, value), result|
+          next unless definition.steps.key?(step_id)
+
+          node = definition.step(step_id)
+          result[step_id] = coerce_value(value, node.type)
+        end
+
+        { answers: answers, follow_up: raw[:follow_up] }
+      rescue JSON::ParserError => e
+        raise ::FlowEngine::Errors::LLMError, "Failed to parse LLM response as JSON: #{e.message}"
       end
     end
   end

@@ -5,15 +5,17 @@ module FlowEngine
   # Used by {Engine} to determine the next step and by UI/export to render the step.
   #
   # @attr_reader id [Symbol] unique step identifier
-  # @attr_reader type [Symbol] input type (e.g. :multi_select, :number_matrix)
+  # @attr_reader type [Symbol] input type (e.g. :multi_select, :number_matrix, :ai_intake)
   # @attr_reader question [String] prompt text for the step
   # @attr_reader options [Array, nil] option keys for select steps; nil for other types
   # @attr_reader option_labels [Hash, nil] key => display label mapping (nil when options are plain strings)
   # @attr_reader fields [Array, nil] field names for number_matrix etc.; nil otherwise
   # @attr_reader transitions [Array<Transition>] ordered list of conditional next-step rules
   # @attr_reader visibility_rule [Rules::Base, nil] rule controlling whether this node is visible (DAG mode)
+  # @attr_reader max_clarifications [Integer] max follow-up rounds for :ai_intake steps (default: 0)
   class Node
-    attr_reader :id, :type, :question, :options, :option_labels, :fields, :transitions, :visibility_rule
+    attr_reader :id, :type, :question, :options, :option_labels, :fields,
+                :transitions, :visibility_rule, :max_clarifications
 
     # @param id [Symbol] step id
     # @param type [Symbol] step/input type
@@ -23,6 +25,7 @@ module FlowEngine
     # @param fields [Array, nil] field list for matrix-style steps
     # @param transitions [Array<Transition>] conditional next-step transitions (default: [])
     # @param visibility_rule [Rules::Base, nil] optional rule for visibility (default: always visible)
+    # @param max_clarifications [Integer] max follow-up rounds for :ai_intake (default: 0)
     def initialize(id:, # rubocop:disable Metrics/ParameterLists
                    type:,
                    question:,
@@ -30,7 +33,8 @@ module FlowEngine
                    options: nil,
                    fields: nil,
                    transitions: [],
-                   visibility_rule: nil)
+                   visibility_rule: nil,
+                   max_clarifications: 0)
       @id = id
       @type = type
       @question = question
@@ -39,7 +43,13 @@ module FlowEngine
       @fields = fields&.freeze
       @transitions = transitions.freeze
       @visibility_rule = visibility_rule
+      @max_clarifications = max_clarifications
       freeze
+    end
+
+    # @return [Boolean] true if this is an AI intake step
+    def ai_intake?
+      type == :ai_intake
     end
 
     # Resolves the next step id from current answers by evaluating transitions in order.
