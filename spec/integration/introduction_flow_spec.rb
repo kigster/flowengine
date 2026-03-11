@@ -6,12 +6,18 @@ RSpec.describe "Introduction flow integration" do
       start :filing_status
 
       introduction label: "Tell us about your tax situation",
-                   placeholder: "Describe your filing status, income sources, and any special circumstances"
+                   placeholder:
+                     "Describe your filing status, income sources, and any special circumstances"
 
       step :filing_status do
         type :single_select
         question "What is your filing status for 2025?"
-        options %w[single married_filing_jointly married_filing_separately head_of_household]
+        options %w[
+          single
+          married_filing_jointly
+          married_filing_separately
+          head_of_household
+        ]
         transition to: :dependents
       end
 
@@ -25,7 +31,8 @@ RSpec.describe "Introduction flow integration" do
         type :multi_select
         question "Select all income types that apply"
         options %w[W2 1099 Business Investment Rental Retirement]
-        transition to: :business_count, if_rule: contains(:income_types, "Business")
+        transition to: :business_count,
+                   if_rule: contains(:income_types, "Business")
         transition to: :contact_info
       end
 
@@ -43,7 +50,9 @@ RSpec.describe "Introduction flow integration" do
   end
 
   let(:adapter) { instance_double(FlowEngine::LLM::Adapter) }
-  let(:llm_client) { FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-4o-mini") }
+  let(:llm_client) do
+    FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-4o-mini")
+  end
 
   describe "LLM pre-fills and user completes remaining steps" do
     it "skips pre-filled steps and continues from the first unanswered one" do
@@ -86,8 +95,11 @@ RSpec.describe "Introduction flow integration" do
       engine = FlowEngine::Engine.new(definition)
 
       expect do
-        engine.submit_introduction("My SSN is 123-45-6789 and I am single", llm_client: llm_client)
-      end.to raise_error(FlowEngine::SensitiveDataError)
+        engine.submit_introduction(
+          "My SSN is 123-45-6789 and I am single",
+          llm_client: llm_client
+        )
+      end.to raise_error(FlowEngine::Errors::SensitiveDataError)
 
       expect(engine.current_step_id).to eq(:filing_status)
       expect(engine.answers).to eq({})

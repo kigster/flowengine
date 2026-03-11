@@ -96,7 +96,7 @@ spec/
 ### Error Hierarchy
 
 ```text
-FlowEngine::Error < StandardError
+FlowEngine::Errors::Error < StandardError
   DefinitionError          # Invalid flow definition
   UnknownStepError         # Step id not found
   LLMError                 # LLM-related errors (missing key, parse failure)
@@ -176,7 +176,7 @@ end
 engine = FlowEngine::Engine.new(definition)
 
 # Optional: submit introduction text for LLM pre-filling
-adapter = FlowEngine::LLM::OpenAIAdapter.new(api_key: ENV["OPENAI_API_KEY"])
+adapter = FlowEngine::LLM::Adapters::OpenAIAdapter.new(api_key: ENV["OPENAI_API_KEY"])
 client = FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-4o-mini")
 engine.submit_introduction("I am married with 2 kids, W2 and business income", llm_client: client)
 # Pre-filled steps are auto-advanced; engine.current_step_id is now the first unanswered step
@@ -264,7 +264,7 @@ The introduction config is stored on `Definition#introduction` (an `Introduction
 client = FlowEngine::LLM.auto_client
 
 # Or explicitly choose a provider:
-adapter = FlowEngine::LLM::AnthropicAdapter.new(api_key: ENV["ANTHROPIC_API_KEY"])
+adapter = FlowEngine::LLM::Adapters::AnthropicAdapter.new(api_key: ENV["ANTHROPIC_API_KEY"])
 client = FlowEngine::LLM::Client.new(adapter: adapter, model: "claude-sonnet-4-20250514")
 
 engine = FlowEngine::Engine.new(definition)
@@ -294,13 +294,13 @@ client = FlowEngine::LLM.auto_client(anthropic_api_key: "sk-...", model: "claude
 FlowEngine::LLM::Adapter
 
 # Anthropic via ruby_llm gem (requires ANTHROPIC_API_KEY env var or explicit key)
-FlowEngine::LLM::AnthropicAdapter.new(api_key: "sk-ant-...")
+FlowEngine::LLM::Adapters::AnthropicAdapter.new(api_key: "sk-ant-...")
 
 # OpenAI via ruby_llm gem (requires OPENAI_API_KEY env var or explicit key)
-FlowEngine::LLM::OpenAIAdapter.new(api_key: "sk-...")
+FlowEngine::LLM::Adapters::OpenAIAdapter.new(api_key: "sk-...")
 
 # Google Gemini via ruby_llm gem (requires GEMINI_API_KEY env var or explicit key)
-FlowEngine::LLM::GeminiAdapter.new(api_key: "AIza...")
+FlowEngine::LLM::Adapters::GeminiAdapter.new(api_key: "AIza...")
 
 # Client wraps adapter + model
 FlowEngine::LLM::Client.new(adapter: adapter, model: "claude-sonnet-4-20250514")

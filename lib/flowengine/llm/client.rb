@@ -10,11 +10,11 @@ module FlowEngine
     class Client
       attr_reader :adapter, :model
 
-      # @param adapter [Adapter] LLM provider adapter (e.g. OpenAIAdapter)
-      # @param model [String] model identifier (default: "gpt-4o-mini")
-      def initialize(adapter:, model: "gpt-4o-mini")
+      # @param adapter [Adapter] LLM provider adapter (e.g. Adapters::OpenAIAdapter)
+      # @param model [String, nil] model identifier; defaults to the adapter's model
+      def initialize(adapter:, model: nil)
         @adapter = adapter
-        @model = model
+        @model = model || adapter.model
       end
 
       # Sends the introduction text to the LLM with a system prompt built from
@@ -23,7 +23,7 @@ module FlowEngine
       # @param definition [Definition] flow definition (used to build system prompt)
       # @param introduction_text [String] user's free-form introduction
       # @return [Hash<Symbol, Object>] step_id => extracted value
-      # @raise [LLMError] on response parsing failures
+      # @raise [Errors::LLMError] on response parsing failures
       def parse_introduction(definition:, introduction_text:)
         system_prompt = SystemPromptBuilder.new(definition).build
         response_text = adapter.chat(
@@ -32,6 +32,10 @@ module FlowEngine
           model: model
         )
         parse_response(response_text, definition)
+      end
+
+      def to_s
+        "#<#{self.class.name} adapter=#{adapter} model=#{model}>"
       end
 
       private
@@ -47,7 +51,7 @@ module FlowEngine
           result[step_id] = coerce_value(value, node.type)
         end
       rescue JSON::ParserError => e
-        raise LLMError, "Failed to parse LLM response as JSON: #{e.message}"
+        raise ::FlowEngine::Errors::LLMError, "Failed to parse LLM response as JSON: #{e.message}"
       end
 
       def extract_json(text)

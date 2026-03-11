@@ -31,13 +31,19 @@ RSpec.describe FlowEngine::DSL::FlowBuilder do
         question "Hello"
       end
 
-      expect { builder.build }.to raise_error(FlowEngine::DefinitionError, /No start step/)
+      expect { builder.build }.to raise_error(
+        FlowEngine::Errors::DefinitionError,
+        /No start step/
+      )
     end
 
     it "raises DefinitionError when no steps defined" do
       builder.start :step1
 
-      expect { builder.build }.to raise_error(FlowEngine::DefinitionError, /No steps/)
+      expect { builder.build }.to raise_error(
+        FlowEngine::Errors::DefinitionError,
+        /No steps/
+      )
     end
 
     it "supports rule helpers in flow builder context" do

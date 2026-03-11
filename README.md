@@ -98,6 +98,69 @@ engine.history
 
 ### Using the `flowengine-cli` gem to Generate the JSON Answers File
 
+---
+
+## LLM-Based DSL Capabilities & Environment Variables
+
+There are several environment variables that define which vendor and which model you can talk to should you choose to engage LLM in your decision logic.
+
+There is a very special YAML file that's provided with this gem, which locks in the list of supported vendors and three types of models per vendor:
+
+- best bang for the buck models
+- deep thinking and hard mode models
+- fastest models
+- *at some point we might also add the "cheapest".*
+
++The file [resources/models.yml](resources/models.yml) defines which models are available to the adapter. This file is used at the startup of the gem, to load and initialize all LLM Adapters for which we have the API Key defined in the environment. And for those we'll have at least three model names loaded:
+
+- `top:` — best results, likely the most expensive.
+- `default:` — default model, if the user of the adapter does not specify.
+- `fastest` — the fastest model from this vendor.
+
+Here is the contents of `resources/models.yml` verbatim:
+
+```yaml
+models:
+  version: "1.0"
+  date: "Wed Mar 11 02:35:39 PDT 2026"
+  vendors:
+    anthropic: 
+      adapter: "FlowEngine::LLM::Adapters::AnthropicAdapter"
+      var: "ANTHROPIC_API_KEY"
+      top: "claude-opus-4-6"
+      default: "claude-sonnet-4-6"
+      fastest: "claude-haiku-4-5-20251001"
+    openai:
+      adapter: "FlowEngine::LLM::Adapters::OpenAIAdapter"
+      var: "OPENAI_API_KEY"
+      top: "gpt-5.4"
+      default: "gpt-5-mini"
+      fastest: "gpt-5-nano"
+    gemini:
+      adapter: "FlowEngine::LLM::Adapters::GeminiAdapters"
+      var: "GEMINI_API_KEY"
+      top: "gemini-3.1-pro-preview"
+      default: "gemini-2.5-flash"
+      fastest: "gemini-2.5-flash-lite"
+```
+
+Notice how this file operates as almost a sort of glue for the gem: it explicitly tells you the names of variables to store your API keys, the class names of the corresponding Adapters, and the three models for each vendor:
+
+1. `:top`
+2. `:default`
+3. `:fastest`
+
+> [!IMPORTANT]
+>
+> The reason these models are extracted into a separate YAML file should be obvious: the contents of this list seems to change every week, and gem can remain at the same version for years. For this reason, the gem honors the environment variable `${FLOWENGINE_LLM_MODELS_PATH}` and will read the models and vendors from the file pointed to by that path environment variable. This is your door to better models, and other LLM vendors that RubyLLM supports.
+
+When the gem is loading, one of the first things it does is load this YAML file and instantiate the hash of pre-initialized adapters.
+
+Need an adapter to throw with your API call?
+
+```ruby
+FlowEngine::LLM[vendor: :anthropic, 'claude-opus-4-6']
+
 ## LLM-parsed Introduction
 
 FlowEngine supports an optional **introduction step** that collects free-form text from the user before the structured flow begins. An LLM parses this text to pre-fill answers, automatically skipping steps the user already answered in their introduction.
@@ -180,11 +243,11 @@ Before any text reaches the LLM, `submit_introduction` scans for sensitive data 
 - **EIN**: `12-3456789`
 - **Nine consecutive digits**: `123456789`
 
-If detected, a `FlowEngine::SensitiveDataError` is raised immediately. The introduction text is discarded and no LLM call is made.
+If detected, a `FlowEngine::Errors::SensitiveDataError` is raised immediately. The introduction text is discarded and no LLM call is made.
 
 ```ruby
 engine.submit_introduction("My SSN is 123-45-6789", llm_client: client)
-# => raises FlowEngine::SensitiveDataError
+# => raises FlowEngine::Errors::SensitiveDataError
 ```
 
 ### Custom LLM Adapters
@@ -467,11 +530,11 @@ engine = FlowEngine::Engine.new(definition)
 ```ruby
 # Answering after the flow is complete
 engine.answer("extra")
-# => raises FlowEngine::AlreadyFinishedError
+# => raises FlowEngine::Errors::AlreadyFinishedError
 
 # Referencing an unknown step in a definition
 definition.step(:nonexistent)
-# => raises FlowEngine::UnknownStepError
+# => raises FlowEngine::Errors::UnknownStepError
 
 # Invalid definition (start step doesn't exist)
 FlowEngine.define do
@@ -481,19 +544,19 @@ FlowEngine.define do
     question "Hello"
   end
 end
-# => raises FlowEngine::DefinitionError
+# => raises FlowEngine::Errors::DefinitionError
 
 # Sensitive data in introduction
 engine.submit_introduction("My SSN is 123-45-6789", llm_client: client)
-# => raises FlowEngine::SensitiveDataError
+# => raises FlowEngine::Errors::SensitiveDataError
 
 # Introduction exceeds maxlength
 engine.submit_introduction("A" * 3000, llm_client: client)
-# => raises FlowEngine::ValidationError
+# => raises FlowEngine::Errors::ValidationError
 
 # Missing API key or LLM response parsing failure
-FlowEngine::LLM::OpenAIAdapter.new  # without OPENAI_API_KEY
-# => raises FlowEngine::LLMError
+FlowEngine::LLM::Adapters::OpenAIAdapter.new  # without OPENAI_API_KEY
+# => raises FlowEngine::Errors::LLMError
 ```
 
 ## Validation
@@ -510,8 +573,8 @@ class FlowEngine::Validation::Adapter
 end
 
 # Result object
-FlowEngine::Validation::Result.new(valid: true, errors: [])
-FlowEngine::Validation::Result.new(valid: false, errors: ["must be a number"])
+FlowEngine::Errors::Validation::Result.new(valid: true, errors: [])
+FlowEngine::Errors::Validation::Result.new(valid: false, errors: ["must be a number"])
 ```
 
 ### Custom Validator Example
@@ -532,12 +595,12 @@ class MyValidator < FlowEngine::Validation::Adapter
       end
     end
 
-    FlowEngine::Validation::Result.new(valid: errors.empty?, errors: errors)
+    FlowEngine::Errors::Validation::Result.new(valid: errors.empty?, errors: errors)
   end
 end
 
 engine = FlowEngine::Engine.new(definition, validator: MyValidator.new)
-engine.answer("not_a_number")  # => raises FlowEngine::ValidationError
+engine.answer("not_a_number")  # => raises FlowEngine::Errors::ValidationError
 ```
 
 ## Mermaid Diagram Export

@@ -76,7 +76,9 @@ RSpec.describe FlowEngine::Engine do
 
     it "raises AlreadyFinishedError when answering after finished" do
       engine.answer(["A"]) # no matching transition -> finished
-      expect { engine.answer("more") }.to raise_error(FlowEngine::AlreadyFinishedError)
+      expect { engine.answer("more") }.to raise_error(
+        FlowEngine::Errors::AlreadyFinishedError
+      )
     end
   end
 
@@ -91,31 +93,39 @@ RSpec.describe FlowEngine::Engine do
       engine.answer("done")
       expect(engine.finished?).to be true
 
-      expect(engine.answers).to eq({
-                                     step1: ["B"],
-                                     step2: "some text",
-                                     step3: "done"
-                                   })
+      expect(engine.answers).to eq(
+        { step1: ["B"], step2: "some text", step3: "done" }
+      )
     end
   end
 
   describe "with validator" do
-    let(:failing_result) { FlowEngine::Validation::Result.new(valid: false, errors: ["Bad input"]) }
-    let(:passing_result) { FlowEngine::Validation::Result.new(valid: true, errors: []) }
+    let(:failing_result) do
+      FlowEngine::Validation::Result.new(
+        valid: false,
+        errors: ["Bad input"]
+      )
+    end
+    let(:passing_result) do
+      FlowEngine::Validation::Result.new(valid: true, errors: [])
+    end
     let(:validator) { instance_double(FlowEngine::Validation::Adapter) }
 
     subject(:engine) { described_class.new(definition, validator: validator) }
 
     it "raises ValidationError when validation fails" do
       allow(validator).to receive(:validate).and_return(failing_result)
-      expect { engine.answer(["B"]) }.to raise_error(FlowEngine::ValidationError, /Bad input/)
+      expect { engine.answer(["B"]) }.to raise_error(
+        FlowEngine::Errors::ValidationError,
+        /Bad input/
+      )
     end
 
     it "does not advance when validation fails" do
       allow(validator).to receive(:validate).and_return(failing_result)
       begin
         engine.answer(["B"])
-      rescue FlowEngine::ValidationError
+      rescue FlowEngine::Errors::ValidationError
         # expected
       end
       expect(engine.current_step_id).to eq(:step1)

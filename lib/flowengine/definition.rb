@@ -30,7 +30,7 @@ module FlowEngine
     # @return [Node] the node for that step
     # @raise [UnknownStepError] if id is not in steps
     def step(id)
-      steps.fetch(id) { raise UnknownStepError, "Unknown step: #{id.inspect}" }
+      steps.fetch(id) { raise Errors::UnknownStepError, "Unknown step: #{id.inspect}" }
     end
 
     # @return [Array<Symbol>] all step ids in the definition
@@ -41,7 +41,9 @@ module FlowEngine
     private
 
     def validate!
-      raise DefinitionError, "Start step #{start_step_id.inspect} not found in nodes" unless steps.key?(start_step_id)
+      return if steps.key?(start_step_id)
+
+      raise Errors::DefinitionError, "Start step #{start_step_id.inspect} not found in nodes"
     end
   end
 end
