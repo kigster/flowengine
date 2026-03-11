@@ -2,32 +2,15 @@
 
 [![RSpec](https://github.com/kigster/flowengine/actions/workflows/rspec.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rspec.yml) &nbsp; [![RuboCop](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml/badge.svg)](https://github.com/kigster/flowengine/actions/workflows/rubocop.yml) &nbsp; ![Coverage](docs/badges/coverage_badge.svg)
 
-This gem is the foundation of collecting complex multi-branch information from a user using a flow definition written in Ruby DSL. It shouldn't take too long to learn the DSL even for a non-technical person.
-
-This gem does not have any UI or an interactive component. It is used as the foundation for additional gems that are built on top of this one, and provide various interactive interfaces for colleting information based on the DSL definition.
-
-The simplest way to see this in action is to use the companion gem [`flowengine-cli`](https://rubygems.org/gems/flowengine-cli), which, given the flow DSL will walk the user through the questioniare according to the DSL flow definition, but using terminal UI and ASCII-based flow.
-
-**A slightly different explanation is that it offere a declarative flow engine for building rules-driven wizards and intake forms in pure Ruby.**
-
-> [!NOTE]
-> FlowEngine lets you define multi-step flows as **directed graphs** with **conditional branching**, evaluate transitions using an **AST-based rule system**, and collect structured answers through a **stateful runtime engine** — all without framework dependencies.
+A declarative flow engine for building rules-driven wizards and intake forms in pure Ruby. Define multi-step flows as **directed graphs** with **conditional branching**, evaluate transitions using an **AST-based rule system**, and collect structured answers through a **stateful runtime engine** — all without framework dependencies.
 
 > [!CAUTION]
 > **This is not a form builder.** It's a *Form Definition Engine* that separates flow logic, data schema, and UI rendering into independent concerns.
 
 ## Installation
 
-Add to your Gemfile:
-
 ```ruby
 gem "flowengine"
-```
-
-Or install directly:
-
-```bash
-gem install flowengine
 ```
 
 ## Quick Start
@@ -35,11 +18,7 @@ gem install flowengine
 ```ruby
 require "flowengine"
 
-# 1. Define a flow
 definition = FlowEngine.define do
-  introduction label: "What are your favorite cocktails?",
-               placeholder: "Old Fashion, Whisky Sour, etc",
-               maxlength: 2000
   start :name
 
   step :name do
@@ -68,106 +47,216 @@ definition = FlowEngine.define do
   end
 end
 
-# 2. Run the engine
 engine = FlowEngine::Engine.new(definition)
-
 engine.answer("Alice")       # :name    -> :age
 engine.answer(25)            # :age     -> :beverage  (25 > 20)
 engine.answer("Wine")        # :beverage -> :thanks
 engine.answer("ok")          # :thanks  -> finished
 
 engine.finished?  # => true
-engine.answers
-# => { name: "Alice", age: 25, beverage: "Wine", thanks: "ok" }
-engine.history
-# => [:name, :age, :beverage, :thanks]
+engine.answers    # => { name: "Alice", age: 25, beverage: "Wine", thanks: "ok" }
+engine.history    # => [:name, :age, :beverage, :thanks]
 ```
 
-If Alice were 18 instead, the engine would skip `:beverage` entirely:
-
-```ruby
-engine.answer("Alice")       # :name    -> :age
-engine.answer(18)            # :age     -> :thanks  (18 is NOT > 20)
-engine.answer("ok")          # :thanks  -> finished
-
-engine.answers
-# => { name: "Alice", age: 18, thanks: "ok" }
-engine.history
-# => [:name, :age, :thanks]
-```
-
-### Using the `flowengine-cli` gem to Generate the JSON Answers File
+If Alice were 18, the engine skips `:beverage` entirely — the first matching transition (`18 NOT > 20`) falls through to the unconditional `:thanks`.
 
 ---
 
-## LLM-Based DSL Capabilities & Environment Variables
+## The DSL
 
-There are several environment variables that define which vendor and which model you can talk to should you choose to engage LLM in your decision logic.
+### Defining a Flow
 
-There is a very special YAML file that's provided with this gem, which locks in the list of supported vendors and three types of models per vendor:
+Every flow starts with `FlowEngine.define`, which returns a **frozen, immutable** `Definition`:
 
-- best bang for the buck models
-- deep thinking and hard mode models
-- fastest models
-- *at some point we might also add the "cheapest".*
+```ruby
+definition = FlowEngine.define do
+  start :first_step
 
-+The file [resources/models.yml](resources/models.yml) defines which models are available to the adapter. This file is used at the startup of the gem, to load and initialize all LLM Adapters for which we have the API Key defined in the environment. And for those we'll have at least three model names loaded:
+  # Optional: one-shot LLM pre-fill (see "Introduction" section)
+  introduction label: "Describe your situation",
+               placeholder: "Type here...",
+               maxlength: 2000
 
-- `top:` — best results, likely the most expensive.
-- `default:` — default model, if the user of the adapter does not specify.
-- `fastest` — the fastest model from this vendor.
+  step :first_step do
+    type :text
+    question "What is your name?"
+    transition to: :second_step
+  end
+end
+```
 
-Here is the contents of `resources/models.yml` verbatim:
+### Step Configuration
+
+| Method | Purpose | Example |
+|--------|---------|---------|
+| `type` | Input type (for UI adapters) | `:text`, `:number`, `:single_select`, `:multi_select`, `:number_matrix`, `:ai_intake` |
+| `question` | Prompt shown to the user | `"What is your filing status?"` |
+| `options` | Available choices (select types) | `%w[W2 1099 Business]` |
+| `fields` | Named fields (matrix types) | `%w[RealEstate SCorp LLC]` |
+| `decorations` | Opaque UI metadata | `{ hint: "metadata" }` |
+| `transition` | Where to go next (with optional condition) | `transition to: :next, if_rule: equals(:field, "val")` |
+| `visible_if` | Visibility rule (DAG mode) | `visible_if contains(:income, "Rental")` |
+| `max_clarifications` | Max follow-up rounds for `:ai_intake` steps | `max_clarifications 3` |
+
+### Transitions
+
+Evaluated **in order** — the first matching transition wins. A transition with no `if_rule:` always matches (use as fallback):
+
+```ruby
+step :income_types do
+  type :multi_select
+  question "Select income types."
+  options %w[W2 1099 Business Investment Rental]
+
+  transition to: :business_count,     if_rule: contains(:income_types, "Business")
+  transition to: :investment_details, if_rule: contains(:income_types, "Investment")
+  transition to: :state_filing  # unconditional fallback
+end
+```
+
+### Visibility Rules
+
+Steps can have visibility conditions for DAG-mode rendering:
+
+```ruby
+step :spouse_income do
+  type :number
+  question "What is your spouse's annual income?"
+  visible_if equals(:filing_status, "married_filing_jointly")
+  transition to: :deductions
+end
+```
+
+## Rule System
+
+Rules are **immutable AST objects** — composable and evaluated polymorphically.
+
+### Atomic Rules
+
+| Helper | Evaluates |
+|--------|-----------|
+| `contains(:field, "val")` | `Array(answers[:field]).include?("val")` |
+| `equals(:field, "val")` | `answers[:field] == "val"` |
+| `greater_than(:field, 10)` | `answers[:field].to_i > 10` |
+| `less_than(:field, 5)` | `answers[:field].to_i < 5` |
+| `not_empty(:field)` | `answers[:field]` is not nil and not empty |
+
+### Composite Rules
+
+```ruby
+# AND — all must be true
+transition to: :special, if_rule: all(
+  equals(:status, "married"),
+  contains(:income, "Business"),
+  greater_than(:business_count, 2)
+)
+
+# OR — at least one must be true
+transition to: :alt, if_rule: any(
+  contains(:income, "Investment"),
+  contains(:income, "Rental")
+)
+
+# Nest arbitrarily
+transition to: :complex, if_rule: all(
+  equals(:status, "married"),
+  any(greater_than(:biz_count, 3), contains(:income, "Rental")),
+  not_empty(:dependents)
+)
+```
+
+## Engine API
+
+```ruby
+engine = FlowEngine::Engine.new(definition)
+```
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `current_step_id` | `Symbol?` | Current step ID |
+| `current_step` | `Node?` | Current Node object |
+| `answer(value)` | `nil` | Records answer and advances |
+| `finished?` | `Boolean` | True when no more steps |
+| `answers` | `Hash` | All collected `{ step_id => value }` |
+| `history` | `Array<Symbol>` | Visited step IDs in order |
+| `definition` | `Definition` | The immutable flow definition |
+| `submit_introduction(text, llm_client:)` | `nil` | One-shot LLM pre-fill from free-form text |
+| `submit_ai_intake(text, llm_client:)` | `ClarificationResult` | Multi-round AI intake for current `:ai_intake` step |
+| `submit_clarification(text, llm_client:)` | `ClarificationResult` | Continue an active AI intake conversation |
+| `introduction_text` | `String?` | Raw introduction text submitted |
+| `clarification_round` | `Integer` | Current AI intake round (0 if none active) |
+| `conversation_history` | `Array<Hash>` | AI intake conversation `[{role:, text:}]` |
+| `to_state` / `.from_state` | `Hash` / `Engine` | State serialization for persistence |
+
+### Error Handling
+
+```ruby
+engine.answer("extra")                        # AlreadyFinishedError (flow finished)
+definition.step(:nonexistent)                 # UnknownStepError
+engine.submit_introduction("SSN: 123-45-6789", llm_client:) # SensitiveDataError
+engine.submit_introduction("A" * 3000, llm_client:)         # ValidationError (maxlength)
+engine.submit_ai_intake("hi", llm_client:)    # EngineError (not on an ai_intake step)
+```
+
+---
+
+## LLM Integration
+
+FlowEngine offers two ways to use LLMs for pre-filling answers from free-form text.
+
+### LLM Adapters & Configuration
+
+The gem ships with three adapters (all via [`ruby_llm`](https://github.com/crmne/ruby_llm)):
+
+| Adapter | Env Variable |
+|---------|-------------|
+| `AnthropicAdapter` | `ANTHROPIC_API_KEY` |
+| `OpenAIAdapter` | `OPENAI_API_KEY` |
+| `GeminiAdapter` | `GEMINI_API_KEY` |
+
+The file [`resources/models.yml`](resources/models.yml) defines three model tiers per vendor (`top`, `default`, `fastest`). Override with `$FLOWENGINE_LLM_MODELS_PATH`.
 
 ```yaml
 models:
-  version: "1.0"
-  date: "Wed Mar 11 02:35:39 PDT 2026"
   vendors:
-    anthropic: 
-      adapter: "FlowEngine::LLM::Adapters::AnthropicAdapter"
+    anthropic:
       var: "ANTHROPIC_API_KEY"
       top: "claude-opus-4-6"
       default: "claude-sonnet-4-6"
       fastest: "claude-haiku-4-5-20251001"
     openai:
-      adapter: "FlowEngine::LLM::Adapters::OpenAIAdapter"
       var: "OPENAI_API_KEY"
       top: "gpt-5.4"
       default: "gpt-5-mini"
       fastest: "gpt-5-nano"
     gemini:
-      adapter: "FlowEngine::LLM::Adapters::GeminiAdapters"
       var: "GEMINI_API_KEY"
       top: "gemini-3.1-pro-preview"
       default: "gemini-2.5-flash"
       fastest: "gemini-2.5-flash-lite"
 ```
 
-Notice how this file operates as almost a sort of glue for the gem: it explicitly tells you the names of variables to store your API keys, the class names of the corresponding Adapters, and the three models for each vendor:
-
-1. `:top`
-2. `:default`
-3. `:fastest`
-
-> [!IMPORTANT]
->
-> The reason these models are extracted into a separate YAML file should be obvious: the contents of this list seems to change every week, and gem can remain at the same version for years. For this reason, the gem honors the environment variable `${FLOWENGINE_LLM_MODELS_PATH}` and will read the models and vendors from the file pointed to by that path environment variable. This is your door to better models, and other LLM vendors that RubyLLM supports.
-
-When the gem is loading, one of the first things it does is load this YAML file and instantiate the hash of pre-initialized adapters.
-
-Need an adapter to throw with your API call?
-
 ```ruby
-FlowEngine::LLM[vendor: :anthropic, 'claude-opus-4-6']
+# Auto-detect from environment (checks Anthropic > OpenAI > Gemini)
+client = FlowEngine::LLM.auto_client
 
-## LLM-parsed Introduction
+# Explicit provider / model override
+client = FlowEngine::LLM.auto_client(anthropic_api_key: "sk-ant-...", model: "claude-haiku-4-5-20251001")
 
-FlowEngine supports an optional **introduction step** that collects free-form text from the user before the structured flow begins. An LLM parses this text to pre-fill answers, automatically skipping steps the user already answered in their introduction.
+# Manual adapter
+adapter = FlowEngine::LLM::Adapters::OpenAIAdapter.new(api_key: ENV["OPENAI_API_KEY"])
+client = FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-5-mini")
+```
 
-### Defining an Introduction
+### Sensitive Data Protection
 
-Add the `introduction` command to your flow definition:
+Before any text reaches the LLM, `SensitiveDataFilter` scans for SSN, ITIN, EIN, and nine-consecutive-digit patterns. If detected, a `SensitiveDataError` is raised immediately — no LLM call is made.
+
+---
+
+### Option 1: Introduction (One-Shot Pre-Fill)
+
+A flow-level free-form text field parsed by the LLM in a single pass. Good for simple intake where one prompt is enough.
 
 ```ruby
 definition = FlowEngine.define do
@@ -175,7 +264,7 @@ definition = FlowEngine.define do
 
   introduction label: "Tell us about your tax situation",
                placeholder: "e.g. I am married, filing jointly, with 2 dependents...",
-               maxlength: 2000  # optional character limit
+               maxlength: 2000
 
   step :filing_status do
     type :single_select
@@ -187,108 +276,190 @@ definition = FlowEngine.define do
   step :dependents do
     type :number
     question "How many dependents?"
+  end
+end
+
+engine = FlowEngine::Engine.new(definition)
+engine.submit_introduction(
+  "I am married filing jointly with 2 dependents",
+  llm_client: FlowEngine::LLM.auto_client
+)
+engine.answers   # => { filing_status: "married_filing_jointly", dependents: 2 }
+engine.finished? # => true
+```
+
+---
+
+### Option 2: AI Intake Steps (Multi-Round Conversational)
+
+An `:ai_intake` step type that supports multi-round clarification. Place them anywhere in the flow — including multiple times. The LLM extracts answers for downstream steps and can ask follow-up questions.
+
+```ruby
+definition = FlowEngine.define do
+  start :personal_intake
+
+  # AI intake: collects info for the steps that follow
+  step :personal_intake do
+    type :ai_intake
+    question "Tell us about yourself and your tax situation"
+    max_clarifications 2  # up to 2 follow-up rounds (0 = one-shot)
+    transition to: :filing_status
+  end
+
+  step :filing_status do
+    type :single_select
+    question "What is your filing status?"
+    options %w[single married_joint married_separate head_of_household]
+    transition to: :dependents
+  end
+
+  step :dependents do
+    type :number
+    question "How many dependents do you claim?"
     transition to: :income_types
   end
 
   step :income_types do
     type :multi_select
-    question "Select income types"
-    options %w[W2 1099 Business Investment]
+    question "Select all income types that apply"
+    options %w[W2 1099 Business Investment Rental]
   end
 end
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `label` | Yes | Text shown above the input field |
-| `placeholder` | No | Ghost text inside the text area (default: `""`) |
-| `maxlength` | No | Maximum character count (default: `nil` = unlimited) |
-
-### Using the Introduction at Runtime
+#### Running an AI Intake
 
 ```ruby
-# 1. Auto-detect adapter from environment (checks ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY)
+engine = FlowEngine::Engine.new(definition)
 client = FlowEngine::LLM.auto_client
 
-# Or explicitly choose a provider:
-# client = FlowEngine::LLM.auto_client(anthropic_api_key: "sk-ant-...")
-# client = FlowEngine::LLM.auto_client(openai_api_key: "sk-...", model: "gpt-4o")
-# client = FlowEngine::LLM.auto_client(gemini_api_key: "AIza...")
-
-# 2. Create the engine and submit the introduction
-engine = FlowEngine::Engine.new(definition)
-engine.submit_introduction(
-  "I am married filing jointly with 2 dependents, W2 and business income",
+# Round 1: initial submission
+result = engine.submit_ai_intake(
+  "I'm married filing jointly, 2 kids, W2 and business income",
   llm_client: client
 )
+result.done?          # => false (LLM wants to ask more)
+result.follow_up      # => "Which state do you primarily reside in?"
+result.round          # => 1
+result.pending_steps  # => [:income_types] (steps still unanswered)
+engine.answers        # => { filing_status: "married_joint", dependents: 2 }
 
-# 3. The LLM pre-fills answers and the engine auto-advances
-engine.answers
-# => { filing_status: "married_filing_jointly", dependents: 2,
-#      income_types: ["W2", "Business"] }
+# Round 2: respond to follow-up
+result = engine.submit_clarification(
+  "California. W2 from my job and a small LLC.",
+  llm_client: client
+)
+result.done?  # => true (no more follow-ups or max reached)
+engine.answers[:income_types]  # => ["W2", "Business"]
 
-engine.current_step_id    # => nil (all steps pre-filled in this case)
-engine.introduction_text  # => "I am married filing jointly with 2 dependents, ..."
-engine.finished?          # => true
+# Engine auto-advances past all pre-filled steps
+engine.finished?  # => true
 ```
 
-If the LLM can only extract some answers, the engine stops at the first unanswered step and the user continues the flow normally from there.
+#### ClarificationResult
 
-### Sensitive Data Protection
+Each `submit_ai_intake` / `submit_clarification` call returns a `ClarificationResult`:
 
-Before any text reaches the LLM, `submit_introduction` scans for sensitive data patterns:
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `answered` | `Hash` | Step answers filled this round |
+| `pending_steps` | `Array<Symbol>` | Steps still unanswered |
+| `follow_up` | `String?` | LLM's follow-up question, or `nil` if done |
+| `round` | `Integer` | Current round number (1-based) |
+| `done?` | `Boolean` | True when `follow_up` is nil |
 
-- **SSN**: `123-45-6789`
-- **ITIN**: `912-34-5678`
-- **EIN**: `12-3456789`
-- **Nine consecutive digits**: `123456789`
+When `max_clarifications` is reached, the intake finalizes even if the LLM wanted to ask more. Unanswered steps are presented normally to the user.
 
-If detected, a `FlowEngine::Errors::SensitiveDataError` is raised immediately. The introduction text is discarded and no LLM call is made.
+#### Multiple AI Intakes in One Flow
+
+Place `:ai_intake` steps at multiple points to break up the conversation:
 
 ```ruby
-engine.submit_introduction("My SSN is 123-45-6789", llm_client: client)
-# => raises FlowEngine::Errors::SensitiveDataError
+definition = FlowEngine.define do
+  start :personal_intake
+
+  step :personal_intake do
+    type :ai_intake
+    question "Tell us about yourself and your tax situation"
+    max_clarifications 2
+    transition to: :filing_status
+  end
+
+  step :filing_status do
+    # ... personal info steps ...
+    transition to: :financial_intake
+  end
+
+  # Second AI intake mid-flow
+  step :financial_intake do
+    type :ai_intake
+    question "Describe your financial situation: accounts, debts, investments"
+    max_clarifications 3
+    transition to: :annual_income
+  end
+
+  step :annual_income do
+    # ... financial steps ...
+  end
+end
 ```
+
+Each `:ai_intake` step maintains its own conversation history and round counter. State is fully serializable for persistence between requests.
 
 ### Custom LLM Adapters
 
-The LLM integration uses an adapter pattern. The gem ships with three adapters (all via the [`ruby_llm`](https://github.com/crmne/ruby_llm) gem):
-
-| Adapter | Env Variable | Default Model |
-|---------|-------------|---------------|
-| `AnthropicAdapter` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
-| `OpenAIAdapter` | `OPENAI_API_KEY` | `gpt-4o-mini` |
-| `GeminiAdapter` | `GEMINI_API_KEY` | `gemini-2.0-flash` |
-
-You can also create adapters for any other provider:
-
 ```ruby
-class MyCustomAdapter < FlowEngine::LLM::Adapter
+class MyAdapter < FlowEngine::LLM::Adapter
   def initialize(api_key:)
     super()
     @api_key = api_key
   end
 
   def chat(system_prompt:, user_prompt:, model:)
-    # Call your LLM API here
-    # Must return the response text (expected to be a JSON string)
+    # Must return response text (expected to be JSON)
   end
 end
-
-adapter = MyCustomAdapter.new(api_key: ENV["MY_API_KEY"])
-client = FlowEngine::LLM::Client.new(adapter: adapter, model: "my-model")
 ```
 
-### State Persistence
+---
 
-The `introduction_text` is included in state serialization:
+## State Persistence
+
+The engine's full state — including AI intake conversation history — can be serialized and restored:
 
 ```ruby
 state = engine.to_state
-# => { current_step_id: ..., answers: { ... }, history: [...], introduction_text: "..." }
+# => { current_step_id: :income_types, answers: { ... }, history: [...],
+#      introduction_text: "...", clarification_round: 1,
+#      conversation_history: [{role: :user, text: "..."}, ...],
+#      active_intake_step_id: :personal_intake }
 
 restored = FlowEngine::Engine.from_state(definition, state)
-restored.introduction_text  # => "I am married filing jointly..."
+```
+
+Round-trips through JSON (string keys) are handled automatically.
+
+## Validation
+
+Pluggable validators via the adapter pattern. Ships with `NullAdapter` (always passes):
+
+```ruby
+class MyValidator < FlowEngine::Validation::Adapter
+  def validate(node, input)
+    errors = []
+    errors << "must be a number" if node.type == :number && !input.is_a?(Numeric)
+    FlowEngine::Validation::Result.new(valid: errors.empty?, errors: errors)
+  end
+end
+
+engine = FlowEngine::Engine.new(definition, validator: MyValidator.new)
+```
+
+## Mermaid Diagram Export
+
+```ruby
+exporter = FlowEngine::Graph::MermaidExporter.new(definition)
+puts exporter.export
 ```
 
 ## Architecture
@@ -297,837 +468,40 @@ restored.introduction_text  # => "I am married filing jointly..."
 
 The core has **zero UI logic**, **zero DB logic**, and **zero framework dependencies**. Adapters translate input/output, persist state, and render UI.
 
-### Core Components
-
 | Component | Responsibility |
 |-----------|---------------|
 | `FlowEngine.define` | DSL entry point; returns a frozen `Definition` |
-| `Introduction` | Immutable config for the introduction step (label, placeholder, maxlength) |
-| `Definition` | Immutable container of the flow graph (nodes + start step + introduction) |
-| `Node` | A single step: type, question, options/fields, transitions, visibility |
-| `Transition` | A directed edge with an optional rule condition |
-| `Rules::*` | AST nodes for conditional logic (`Contains`, `Equals`, `All`, etc.) |
-| `Evaluator` | Evaluates rules against the current answer store |
-| `Engine` | Stateful runtime: tracks current step, answers, history, and introduction |
-| `Validation::Adapter` | Interface for pluggable validation (dry-validation, JSON Schema, etc.) |
-| `LLM::Adapter` | Abstract interface for LLM API calls |
-| `LLM::AnthropicAdapter` | Anthropic/Claude implementation via `ruby_llm` gem |
-| `LLM::OpenAIAdapter` | OpenAI implementation via `ruby_llm` gem |
-| `LLM::GeminiAdapter` | Google Gemini implementation via `ruby_llm` gem |
-| `LLM::Client` | High-level: builds prompt, calls adapter, parses JSON response |
-| `LLM.auto_client` | Factory: auto-detects provider from environment API keys |
+| `Definition` | Immutable flow graph (nodes + start step + introduction) |
+| `Node` | Single step: type, question, options/fields, transitions, visibility |
+| `Transition` | Directed edge with optional rule condition |
+| `Rules::*` | AST nodes for conditional logic |
+| `Evaluator` | Evaluates rules against the answer store |
+| `Engine` | Stateful runtime: current step, answers, history, AI intake state |
+| `ClarificationResult` | Immutable result from an AI intake round |
+| `Introduction` | Immutable config for one-shot introduction (label, placeholder, maxlength) |
+| `Validation::Adapter` | Interface for pluggable validation |
+| `LLM::Client` | High-level: builds prompt, calls adapter, parses JSON |
+| `LLM::Adapter` | Abstract LLM API interface (Anthropic, OpenAI, Gemini implementations) |
 | `LLM::SensitiveDataFilter` | Rejects text containing SSN, ITIN, EIN patterns |
-| `Graph::MermaidExporter` | Exports the flow definition as a Mermaid diagram |
-
-## The DSL
-
-### Defining a Flow
-
-Every flow starts with `FlowEngine.define`, which returns a **frozen, immutable** `Definition`:
-
-```ruby
-definition = FlowEngine.define do
-  start :first_step     # Required: which node to begin at
-
-  # Optional: collect free-form text before the flow, parsed by LLM
-  introduction label: "Describe your situation",
-               placeholder: "Type here...",
-               maxlength: 2000
-
-  step :first_step do
-    # step configuration...
-  end
-
-  step :second_step do
-    # step configuration...
-  end
-end
-```
-
-### Step Configuration
-
-Inside a `step` block, you have access to:
-
-| Method | Purpose | Example |
-|--------|---------|---------|
-| `type` | The input type (for UI adapters) | `:text`, `:number`, `:single_select`, `:multi_select`, `:number_matrix` |
-| `question` | The prompt shown to the user | `"What is your filing status?"` |
-| `options` | Available choices (for select types) | `%w[W2 1099 Business]` |
-| `fields` | Named fields (for matrix types) | `%w[RealEstate SCorp LLC]` |
-| `transition` | Where to go next (with optional condition) | `transition to: :next_step, if_rule: equals(:field, "value")` |
-| `visible_if` | Visibility rule (for DAG mode) | `visible_if contains(:income, "Rental")` |
-
-### Step Types
-
-Step types are semantic labels consumed by UI adapters. The engine itself is type-agnostic — it stores whatever value you pass to `engine.answer(value)`. The types communicate intent to renderers:
-
-```ruby
-step :filing_status do
-  type :single_select                    # One choice from a list
-  question "What is your filing status?"
-  options %w[single married_filing_jointly married_filing_separately head_of_household]
-  transition to: :dependents
-end
-
-step :income_types do
-  type :multi_select                     # Multiple choices from a list
-  question "Select all income types."
-  options %w[W2 1099 Business Investment Rental]
-  transition to: :business, if_rule: contains(:income_types, "Business")
-  transition to: :summary
-end
-
-step :dependents do
-  type :number                           # A numeric value
-  question "How many dependents?"
-  transition to: :income_types
-end
-
-step :business_details do
-  type :number_matrix                    # Multiple named numeric fields
-  question "How many of each business type?"
-  fields %w[RealEstate SCorp CCorp Trust LLC]
-  transition to: :summary
-end
-
-step :notes do
-  type :text                             # Free-form text
-  question "Any additional notes?"
-  transition to: :summary
-end
-```
-
-### Transitions
-
-Transitions define the edges of the flow graph. They are evaluated **in order** — the first matching transition wins:
-
-```ruby
-step :income_types do
-  type :multi_select
-  question "Select income types."
-  options %w[W2 1099 Business Investment Rental]
-
-  # Conditional transitions (checked in order)
-  transition to: :business_count,      if_rule: contains(:income_types, "Business")
-  transition to: :investment_details,  if_rule: contains(:income_types, "Investment")
-  transition to: :rental_details,      if_rule: contains(:income_types, "Rental")
-
-  # Unconditional fallback (always matches)
-  transition to: :state_filing
-end
-```
-
-**Key behavior:** Only the *first* matching transition fires. If the user selects `["Business", "Investment", "Rental"]`, the engine goes to `:business_count` first. The subsequent steps must themselves include transitions to eventually reach `:investment_details` and `:rental_details`.
-
-A transition with no `if_rule:` always matches — use it as a fallback at the end of the list.
-
-### Visibility Rules
-
-Nodes can have visibility conditions for DAG-mode rendering, where a UI adapter shows/hides steps dynamically:
-
-```ruby
-step :spouse_income do
-  type :number
-  question "What is your spouse's annual income?"
-  visible_if equals(:filing_status, "married_filing_jointly")
-  transition to: :deductions
-end
-```
-
-The engine exposes this via `node.visible?(answers)`, which returns `true` when the rule is satisfied (or when no visibility rule is set).
-
-## Rule System
-
-Rules are **AST objects** — not hashes, not strings. They are immutable, composable, and evaluate polymorphically.
-
-### Atomic Rules
-
-| Rule | DSL Helper | Evaluates | String Representation |
-|------|------------|-----------|----------------------|
-| `Contains` | `contains(:field, "val")` | `Array(answers[:field]).include?("val")` | `val in field` |
-| `Equals` | `equals(:field, "val")` | `answers[:field] == "val"` | `field == val` |
-| `GreaterThan` | `greater_than(:field, 10)` | `answers[:field].to_i > 10` | `field > 10` |
-| `LessThan` | `less_than(:field, 5)` | `answers[:field].to_i < 5` | `field < 5` |
-| `NotEmpty` | `not_empty(:field)` | `answers[:field]` is not nil and not empty | `field is not empty` |
-
-### Composite Rules
-
-Combine atomic rules with boolean logic:
-
-```ruby
-# AND — all conditions must be true
-transition to: :special_review,
-           if_rule: all(
-             equals(:filing_status, "married_filing_jointly"),
-             contains(:income_types, "Business"),
-             greater_than(:business_count, 2)
-           )
-
-# OR — at least one condition must be true
-transition to: :alt_path,
-           if_rule: any(
-             contains(:income_types, "Investment"),
-             contains(:income_types, "Rental")
-           )
-```
-
-Composites nest arbitrarily:
-
-```ruby
-transition to: :complex_review,
-           if_rule: all(
-             equals(:filing_status, "married_filing_jointly"),
-             any(
-               greater_than(:business_count, 3),
-               contains(:income_types, "Rental")
-             ),
-             not_empty(:dependents)
-           )
-```
-
-### How Rules Evaluate
-
-Every rule implements `evaluate(answers)` where `answers` is the engine's hash of `{ step_id => value }`:
-
-```ruby
-rule = FlowEngine::Rules::Contains.new(:income_types, "Business")
-rule.evaluate({ income_types: ["W2", "Business"] })  # => true
-rule.evaluate({ income_types: ["W2"] })               # => false
-
-rule = FlowEngine::Rules::All.new(
-  FlowEngine::Rules::Equals.new(:status, "married"),
-  FlowEngine::Rules::GreaterThan.new(:dependents, 0)
-)
-rule.evaluate({ status: "married", dependents: 2 })   # => true
-rule.evaluate({ status: "single", dependents: 2 })    # => false
-```
-
-## Engine API
-
-### Creating and Running
-
-```ruby
-definition = FlowEngine.define { ... }
-engine = FlowEngine::Engine.new(definition)
-```
-
-### Methods
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `engine.current_step_id` | `Symbol` or `nil` | The ID of the current step |
-| `engine.current_step` | `Node` or `nil` | The current Node object |
-| `engine.answer(value)` | `nil` | Records the answer and advances |
-| `engine.submit_introduction(text, llm_client:)` | `nil` | LLM-parses text, pre-fills answers, auto-advances |
-| `engine.finished?` | `Boolean` | `true` when there are no more steps |
-| `engine.answers` | `Hash` | All collected answers `{ step_id => value }` |
-| `engine.history` | `Array<Symbol>` | Ordered list of visited step IDs |
-| `engine.introduction_text` | `String` or `nil` | The raw introduction text submitted |
-| `engine.definition` | `Definition` | The immutable flow definition |
-
-### Error Handling
-
-```ruby
-# Answering after the flow is complete
-engine.answer("extra")
-# => raises FlowEngine::Errors::AlreadyFinishedError
-
-# Referencing an unknown step in a definition
-definition.step(:nonexistent)
-# => raises FlowEngine::Errors::UnknownStepError
-
-# Invalid definition (start step doesn't exist)
-FlowEngine.define do
-  start :missing
-  step :other do
-    type :text
-    question "Hello"
-  end
-end
-# => raises FlowEngine::Errors::DefinitionError
-
-# Sensitive data in introduction
-engine.submit_introduction("My SSN is 123-45-6789", llm_client: client)
-# => raises FlowEngine::Errors::SensitiveDataError
-
-# Introduction exceeds maxlength
-engine.submit_introduction("A" * 3000, llm_client: client)
-# => raises FlowEngine::Errors::ValidationError
-
-# Missing API key or LLM response parsing failure
-FlowEngine::LLM::Adapters::OpenAIAdapter.new  # without OPENAI_API_KEY
-# => raises FlowEngine::Errors::LLMError
-```
-
-## Validation
-
-The engine accepts a pluggable validator via the adapter pattern. The core gem ships with a `NullAdapter` (always passes) and defines the interface for custom adapters:
-
-```ruby
-# The adapter interface
-class FlowEngine::Validation::Adapter
-  def validate(node, input)
-    # Must return a FlowEngine::Validation::Result
-    raise NotImplementedError
-  end
-end
-
-# Result object
-FlowEngine::Errors::Validation::Result.new(valid: true, errors: [])
-FlowEngine::Errors::Validation::Result.new(valid: false, errors: ["must be a number"])
-```
-
-### Custom Validator Example
-
-```ruby
-class MyValidator < FlowEngine::Validation::Adapter
-  def validate(node, input)
-    errors = []
-
-    case node.type
-    when :number
-      errors << "must be a number" unless input.is_a?(Numeric)
-    when :single_select
-      errors << "invalid option" unless node.options&.include?(input)
-    when :multi_select
-      unless input.is_a?(Array) && input.all? { |v| node.options&.include?(v) }
-        errors << "invalid options"
-      end
-    end
-
-    FlowEngine::Errors::Validation::Result.new(valid: errors.empty?, errors: errors)
-  end
-end
-
-engine = FlowEngine::Engine.new(definition, validator: MyValidator.new)
-engine.answer("not_a_number")  # => raises FlowEngine::Errors::ValidationError
-```
-
-## Mermaid Diagram Export
-
-Export any flow definition as a [Mermaid](https://mermaid.js.org/) flowchart:
-
-```ruby
-exporter = FlowEngine::Graph::MermaidExporter.new(definition)
-puts exporter.export
-```
-
-Output:
-
-```mermaid
-flowchart TD
-  name["What is your name?"]
-  name --> age
-  age["How old are you?"]
-  age -->|"age > 20"| beverage
-  age --> thanks
-  beverage["Pick a drink."]
-  beverage --> thanks
-  thanks["Thank you for your responses!"]
-```
-
-## Complete Example: Tax Intake Flow
-
-Here's a realistic 17-step tax intake wizard that demonstrates every feature of the DSL.
-
-### Flow Definition
-
-```ruby
-tax_intake = FlowEngine.define do
-  start :filing_status
-
-  step :filing_status do
-    type :single_select
-    question "What is your filing status for 2025?"
-    options %w[single married_filing_jointly married_filing_separately head_of_household]
-    transition to: :dependents
-  end
-
-  step :dependents do
-    type :number
-    question "How many dependents do you have?"
-    transition to: :income_types
-  end
-
-  step :income_types do
-    type :multi_select
-    question "Select all income types that apply to you in 2025."
-    options %w[W2 1099 Business Investment Rental Retirement]
-    transition to: :business_count,      if_rule: contains(:income_types, "Business")
-    transition to: :investment_details,  if_rule: contains(:income_types, "Investment")
-    transition to: :rental_details,      if_rule: contains(:income_types, "Rental")
-    transition to: :state_filing
-  end
-
-  step :business_count do
-    type :number
-    question "How many total businesses do you own or are a partner in?"
-    transition to: :complex_business_info, if_rule: greater_than(:business_count, 2)
-    transition to: :business_details
-  end
-
-  step :complex_business_info do
-    type :text
-    question "With more than 2 businesses, please provide your primary EIN and a brief description of each entity."
-    transition to: :business_details
-  end
-
-  step :business_details do
-    type :number_matrix
-    question "How many of each business type do you own?"
-    fields %w[RealEstate SCorp CCorp Trust LLC]
-    transition to: :investment_details, if_rule: contains(:income_types, "Investment")
-    transition to: :rental_details,    if_rule: contains(:income_types, "Rental")
-    transition to: :state_filing
-  end
-
-  step :investment_details do
-    type :multi_select
-    question "What types of investments do you hold?"
-    options %w[Stocks Bonds Crypto RealEstate MutualFunds]
-    transition to: :crypto_details,  if_rule: contains(:investment_details, "Crypto")
-    transition to: :rental_details,  if_rule: contains(:income_types, "Rental")
-    transition to: :state_filing
-  end
-
-  step :crypto_details do
-    type :text
-    question "Please describe your cryptocurrency transactions (exchanges used, approximate number of transactions)."
-    transition to: :rental_details, if_rule: contains(:income_types, "Rental")
-    transition to: :state_filing
-  end
-
-  step :rental_details do
-    type :number_matrix
-    question "Provide details about your rental properties."
-    fields %w[Residential Commercial Vacation]
-    transition to: :state_filing
-  end
-
-  step :state_filing do
-    type :multi_select
-    question "Which states do you need to file in?"
-    options %w[California NewYork Texas Florida Illinois Other]
-    transition to: :foreign_accounts
-  end
-
-  step :foreign_accounts do
-    type :single_select
-    question "Do you have any foreign financial accounts (bank accounts, securities, or financial assets)?"
-    options %w[yes no]
-    transition to: :foreign_account_details, if_rule: equals(:foreign_accounts, "yes")
-    transition to: :deduction_types
-  end
-
-  step :foreign_account_details do
-    type :number
-    question "How many foreign accounts do you have?"
-    transition to: :deduction_types
-  end
-
-  step :deduction_types do
-    type :multi_select
-    question "Which additional deductions apply to you?"
-    options %w[Medical Charitable Education Mortgage None]
-    transition to: :charitable_amount, if_rule: contains(:deduction_types, "Charitable")
-    transition to: :contact_info
-  end
-
-  step :charitable_amount do
-    type :number
-    question "What is your total estimated charitable contribution amount for 2025?"
-    transition to: :charitable_documentation, if_rule: greater_than(:charitable_amount, 5000)
-    transition to: :contact_info
-  end
-
-  step :charitable_documentation do
-    type :text
-    question "For charitable contributions over $5,000, please list the organizations and amounts."
-    transition to: :contact_info
-  end
-
-  step :contact_info do
-    type :text
-    question "Please provide your contact information (name, email, phone)."
-    transition to: :review
-  end
-
-  step :review do
-    type :text
-    question "Thank you! Please review your information. Type 'confirm' to submit."
-  end
-end
-```
-
-### Scenario 1: Maximum Path (17 steps visited)
-
-A married filer with all income types, 4 businesses, crypto, rentals, foreign accounts, and high charitable giving:
-
-```ruby
-engine = FlowEngine::Engine.new(tax_intake)
-
-engine.answer("married_filing_jointly")
-engine.answer(3)
-engine.answer(%w[W2 1099 Business Investment Rental Retirement])
-engine.answer(4)
-engine.answer("EIN: 12-3456789. Entities: Alpha LLC, Beta SCorp, Gamma LLC, Delta CCorp")
-engine.answer({ "RealEstate" => 1, "SCorp" => 1, "CCorp" => 1, "Trust" => 0, "LLC" => 2 })
-engine.answer(%w[Stocks Bonds Crypto RealEstate])
-engine.answer("Coinbase and Kraken, approximately 150 transactions in 2025")
-engine.answer({ "Residential" => 2, "Commercial" => 1, "Vacation" => 0 })
-engine.answer(%w[California NewYork])
-engine.answer("yes")
-engine.answer(3)
-engine.answer(%w[Medical Charitable Education Mortgage])
-engine.answer(12_000)
-engine.answer("Red Cross: $5,000; Habitat for Humanity: $4,000; Local Food Bank: $3,000")
-engine.answer("Jane Smith, jane.smith@example.com, 555-123-4567")
-engine.answer("confirm")
-```
-
-**Collected data:**
-
-```json
-{
-  "filing_status": "married_filing_jointly",
-  "dependents": 3,
-  "income_types": ["W2", "1099", "Business", "Investment", "Rental", "Retirement"],
-  "business_count": 4,
-  "complex_business_info": "EIN: 12-3456789. Entities: Alpha LLC, Beta SCorp, Gamma LLC, Delta CCorp",
-  "business_details": {
-    "RealEstate": 1,
-    "SCorp": 1,
-    "CCorp": 1,
-    "Trust": 0,
-    "LLC": 2
-  },
-  "investment_details": ["Stocks", "Bonds", "Crypto", "RealEstate"],
-  "crypto_details": "Coinbase and Kraken, approximately 150 transactions in 2025",
-  "rental_details": {
-    "Residential": 2,
-    "Commercial": 1,
-    "Vacation": 0
-  },
-  "state_filing": ["California", "NewYork"],
-  "foreign_accounts": "yes",
-  "foreign_account_details": 3,
-  "deduction_types": ["Medical", "Charitable", "Education", "Mortgage"],
-  "charitable_amount": 12000,
-  "charitable_documentation": "Red Cross: $5,000; Habitat for Humanity: $4,000; Local Food Bank: $3,000",
-  "contact_info": "Jane Smith, jane.smith@example.com, 555-123-4567",
-  "review": "confirm"
-}
-```
-
-**Path taken** (all 17 steps):
-
-```
-filing_status -> dependents -> income_types -> business_count ->
-complex_business_info -> business_details -> investment_details ->
-crypto_details -> rental_details -> state_filing -> foreign_accounts ->
-foreign_account_details -> deduction_types -> charitable_amount ->
-charitable_documentation -> contact_info -> review
-```
-
-### Scenario 2: Minimum Path (8 steps visited)
-
-A single filer, W2 income only, no special deductions:
-
-```ruby
-engine = FlowEngine::Engine.new(tax_intake)
-
-engine.answer("single")
-engine.answer(0)
-engine.answer(["W2"])
-engine.answer(["Texas"])
-engine.answer("no")
-engine.answer(["None"])
-engine.answer("John Doe, john.doe@example.com, 555-987-6543")
-engine.answer("confirm")
-```
-
-**Collected data:**
-
-```json
-{
-  "filing_status": "single",
-  "dependents": 0,
-  "income_types": ["W2"],
-  "state_filing": ["Texas"],
-  "foreign_accounts": "no",
-  "deduction_types": ["None"],
-  "contact_info": "John Doe, john.doe@example.com, 555-987-6543",
-  "review": "confirm"
-}
-```
-
-**Path taken** (8 steps — skipped 9 steps):
-
-```
-filing_status -> dependents -> income_types -> state_filing ->
-foreign_accounts -> deduction_types -> contact_info -> review
-```
-
-**Skipped:** `business_count`, `complex_business_info`, `business_details`, `investment_details`, `crypto_details`, `rental_details`, `foreign_account_details`, `charitable_amount`, `charitable_documentation`.
-
-### Scenario 3: Medium Path (12 steps visited)
-
-Married, with business + investment income, low charitable giving:
-
-```ruby
-engine = FlowEngine::Engine.new(tax_intake)
-
-engine.answer("married_filing_separately")
-engine.answer(1)
-engine.answer(%w[W2 Business Investment])
-engine.answer(2)                                    # <= 2 businesses, no complex_business_info
-engine.answer({ "RealEstate" => 0, "SCorp" => 1, "CCorp" => 0, "Trust" => 0, "LLC" => 1 })
-engine.answer(%w[Stocks Bonds MutualFunds])          # no Crypto, no crypto_details
-engine.answer(%w[California Illinois])
-engine.answer("no")                                  # no foreign accounts
-engine.answer(%w[Charitable Mortgage])
-engine.answer(3000)                                  # <= 5000, no documentation needed
-engine.answer("Alice Johnson, alice.j@example.com, 555-555-0100")
-engine.answer("confirm")
-```
-
-**Collected data:**
-
-```json
-{
-  "filing_status": "married_filing_separately",
-  "dependents": 1,
-  "income_types": ["W2", "Business", "Investment"],
-  "business_count": 2,
-  "business_details": {
-    "RealEstate": 0,
-    "SCorp": 1,
-    "CCorp": 0,
-    "Trust": 0,
-    "LLC": 1
-  },
-  "investment_details": ["Stocks", "Bonds", "MutualFunds"],
-  "state_filing": ["California", "Illinois"],
-  "foreign_accounts": "no",
-  "deduction_types": ["Charitable", "Mortgage"],
-  "charitable_amount": 3000,
-  "contact_info": "Alice Johnson, alice.j@example.com, 555-555-0100",
-  "review": "confirm"
-}
-```
-
-**Path taken** (12 steps):
-
-```
-filing_status -> dependents -> income_types -> business_count ->
-business_details -> investment_details -> state_filing ->
-foreign_accounts -> deduction_types -> charitable_amount ->
-contact_info -> review
-```
-
-### Scenario 4: Rental + Foreign Accounts (10 steps visited)
-
-Head of household, 1099 + rental income, foreign accounts, no charitable:
-
-```ruby
-engine = FlowEngine::Engine.new(tax_intake)
-
-engine.answer("head_of_household")
-engine.answer(2)
-engine.answer(%w[1099 Rental])
-engine.answer({ "Residential" => 1, "Commercial" => 0, "Vacation" => 1 })
-engine.answer(["Florida"])
-engine.answer("yes")
-engine.answer(1)
-engine.answer(%w[Medical Education])
-engine.answer("Bob Lee, bob@example.com, 555-000-1111")
-engine.answer("confirm")
-```
-
-**Collected data:**
-
-```json
-{
-  "filing_status": "head_of_household",
-  "dependents": 2,
-  "income_types": ["1099", "Rental"],
-  "rental_details": {
-    "Residential": 1,
-    "Commercial": 0,
-    "Vacation": 1
-  },
-  "state_filing": ["Florida"],
-  "foreign_accounts": "yes",
-  "foreign_account_details": 1,
-  "deduction_types": ["Medical", "Education"],
-  "contact_info": "Bob Lee, bob@example.com, 555-000-1111",
-  "review": "confirm"
-}
-```
-
-**Path taken** (10 steps):
-
-```
-filing_status -> dependents -> income_types -> rental_details ->
-state_filing -> foreign_accounts -> foreign_account_details ->
-deduction_types -> contact_info -> review
-```
-
-### Comparing Collected Data Across Paths
-
-The shape of the collected data depends entirely on which path the user takes through the graph. Here's a side-by-side of which keys appear in each scenario:
-
-| Answer Key | Max (17) | Min (8) | Medium (12) | Rental (10) |
-|---|:---:|:---:|:---:|:---:|
-| `filing_status` | x | x | x | x |
-| `dependents` | x | x | x | x |
-| `income_types` | x | x | x | x |
-| `business_count` | x | | x | |
-| `complex_business_info` | x | | | |
-| `business_details` | x | | x | |
-| `investment_details` | x | | x | |
-| `crypto_details` | x | | | |
-| `rental_details` | x | | | x |
-| `state_filing` | x | x | x | x |
-| `foreign_accounts` | x | x | x | x |
-| `foreign_account_details` | x | | | x |
-| `deduction_types` | x | x | x | x |
-| `charitable_amount` | x | | x | |
-| `charitable_documentation` | x | | | |
-| `contact_info` | x | x | x | x |
-| `review` | x | x | x | x |
-
-## Composing Complex Rules
-
-### Example: Multi-Condition Branching
-
-```ruby
-definition = FlowEngine.define do
-  start :status
-
-  step :status do
-    type :single_select
-    question "Filing status?"
-    options %w[single married]
-    transition to: :dependents
-  end
-
-  step :dependents do
-    type :number
-    question "How many dependents?"
-    transition to: :income
-  end
-
-  step :income do
-    type :multi_select
-    question "Income types?"
-    options %w[W2 Business]
-
-    # All three conditions must be true
-    transition to: :special_review,
-               if_rule: all(
-                 equals(:status, "married"),
-                 contains(:income, "Business"),
-                 not_empty(:income)
-               )
-
-    # At least one condition must be true
-    transition to: :alt_review,
-               if_rule: any(
-                 less_than(:dependents, 2),
-                 contains(:income, "W2")
-               )
-
-    # Unconditional fallback
-    transition to: :default_review
-  end
-
-  step :special_review do
-    type :text
-    question "Married with business income - special review required."
-  end
-
-  step :alt_review do
-    type :text
-    question "Alternative review path."
-  end
-
-  step :default_review do
-    type :text
-    question "Default review."
-  end
-end
-```
-
-The four possible outcomes:
-
-| Inputs | Path | Why |
-|--------|------|-----|
-| married, 0 deps, `[W2, Business]` | `:special_review` | `all()` satisfied: married + Business + not empty |
-| single, 0 deps, `[W2]` | `:alt_review` | `all()` fails (not married); `any()` passes (has W2) |
-| single, 1 dep, `[Business]` | `:alt_review` | `all()` fails; `any()` passes (deps < 2) |
-| single, 3 deps, `[Business]` | `:default_review` | `all()` fails; `any()` fails (deps not < 2, no W2) |
-
-## Mermaid Diagram of the Tax Intake Flow
-
-![Example](docs/flowengine-example.png)
-
-<details>
-  <summary>Expand to see Mermaid source</summary>
-
-```mermaid
-flowchart BT
-    filing_status["What is your filing status for 2025?"] --> dependents["How many dependents do you have?"]
-    dependents --> income_types["Select all income types that apply to you in 2025."]
-    income_types -- Business in income_types --> business_count["How many total businesses do you own or are a part..."]
-    income_types -- Investment in income_types --> investment_details["What types of investments do you hold?"]
-    income_types -- Rental in income_types --> rental_details["Provide details about your rental properties."]
-    income_types --> state_filing["Which states do you need to file in?"]
-    business_count -- business_count > 2 --> complex_business_info["With more than 2 businesses, please provide your p..."]
-    business_count --> business_details["How many of each business type do you own?"]
-    complex_business_info --> business_details
-    business_details -- Investment in income_types --> investment_details
-    business_details -- Rental in income_types --> rental_details
-    business_details --> state_filing
-    investment_details -- Crypto in investment_details --> crypto_details["Please describe your cryptocurrency transactions (..."]
-    investment_details -- Rental in income_types --> rental_details
-    investment_details --> state_filing
-    crypto_details -- Rental in income_types --> rental_details
-    crypto_details --> state_filing
-    rental_details --> state_filing
-    state_filing --> foreign_accounts["Do you have any foreign financial accounts (bank a..."]
-    foreign_accounts -- "foreign_accounts == yes" --> foreign_account_details["How many foreign accounts do you have?"]
-    foreign_accounts --> deduction_types["Which additional deductions apply to you?"]
-    foreign_account_details --> deduction_types
-    deduction_types -- Charitable in deduction_types --> charitable_amount["What is your total estimated charitable contributi..."]
-    deduction_types --> contact_info["Please provide your contact information (name, ema..."]
-    charitable_amount -- charitable_amount > 5000 --> charitable_documentation["For charitable contributions over $5,000, please l..."]
-    charitable_amount --> contact_info
-    charitable_documentation --> contact_info
-    contact_info --> review@{ label: "Thank you! Please review your information. Type 'c..." }
-
-    review@{ shape: rect}
-```
-
-</details>
+| `Graph::MermaidExporter` | Exports flow as a Mermaid diagram |
 
 ## Ecosystem
 
-FlowEngine is the core of a three-gem architecture:
-
 | Gem | Purpose |
 |-----|---------|
-| **`flowengine`** (this gem) | Core engine + LLM introduction parsing (depends on `ruby_llm`) |
-| **`flowengine-cli`** | Terminal wizard adapter using [TTY Toolkit](https://ttytoolkit.org/) + Dry::CLI |
+| **`flowengine`** (this gem) | Core engine + LLM integration (depends on `ruby_llm`) |
+| **`flowengine-cli`** | Terminal wizard via [TTY Toolkit](https://ttytoolkit.org/) + Dry::CLI |
 | **`flowengine-rails`** | Rails Engine with ActiveRecord persistence and web views |
 
 ## Development
 
 ```bash
 bundle install
-bundle exec rspec
+just test    # RSpec + RuboCop
+just lint    # RuboCop only
+just doc     # Generate YARD docs
 ```
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+MIT License. See [LICENSE](https://opensource.org/licenses/MIT).
