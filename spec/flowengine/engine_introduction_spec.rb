@@ -6,7 +6,8 @@ RSpec.describe FlowEngine::Engine, "introduction" do
       start :filing_status
 
       introduction label: "Tell us about your tax situation",
-                   placeholder: "e.g. I am married, filing jointly, with 2 dependents..."
+                   placeholder:
+                     "e.g. I am married, filing jointly, with 2 dependents..."
 
       step :filing_status do
         type :single_select
@@ -36,7 +37,7 @@ RSpec.describe FlowEngine::Engine, "introduction" do
   end
 
   let(:adapter) { instance_double(FlowEngine::LLM::Adapter) }
-  let(:llm_client) { FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-4o-mini") }
+  let(:llm_client) { FlowEngine::LLM::Client.new(adapter: adapter, model: "gpt-5-mini") }
 
   subject(:engine) { described_class.new(definition) }
 
@@ -57,28 +58,45 @@ RSpec.describe FlowEngine::Engine, "introduction" do
       end
 
       it "stores the introduction text" do
-        engine.submit_introduction("I am married filing jointly with 2 dependents", llm_client: llm_client)
-        expect(engine.introduction_text).to eq("I am married filing jointly with 2 dependents")
+        engine.submit_introduction(
+          "I am married filing jointly with 2 dependents",
+          llm_client: llm_client
+        )
+        expect(engine.introduction_text).to eq(
+          "I am married filing jointly with 2 dependents"
+        )
       end
 
       it "pre-fills answers from the LLM" do
-        engine.submit_introduction("I am married filing jointly with 2 dependents", llm_client: llm_client)
+        engine.submit_introduction(
+          "I am married filing jointly with 2 dependents",
+          llm_client: llm_client
+        )
         expect(engine.answers[:filing_status]).to eq("married_filing_jointly")
         expect(engine.answers[:dependents]).to eq(2)
       end
 
       it "auto-advances past pre-filled steps" do
-        engine.submit_introduction("I am married filing jointly with 2 dependents", llm_client: llm_client)
+        engine.submit_introduction(
+          "I am married filing jointly with 2 dependents",
+          llm_client: llm_client
+        )
         expect(engine.current_step_id).to eq(:income_types)
       end
 
       it "records pre-filled steps in history" do
-        engine.submit_introduction("I am married filing jointly with 2 dependents", llm_client: llm_client)
+        engine.submit_introduction(
+          "I am married filing jointly with 2 dependents",
+          llm_client: llm_client
+        )
         expect(engine.history).to eq(%i[filing_status dependents income_types])
       end
 
       it "allows continuing the flow from the first unanswered step" do
-        engine.submit_introduction("I am married filing jointly with 2 dependents", llm_client: llm_client)
+        engine.submit_introduction(
+          "I am married filing jointly with 2 dependents",
+          llm_client: llm_client
+        )
         engine.answer(%w[W2 Business])
         expect(engine.current_step_id).to eq(:state_info)
       end
@@ -92,15 +110,16 @@ RSpec.describe FlowEngine::Engine, "introduction" do
       end
 
       it "finishes the flow" do
-        engine.submit_introduction("I'm single, no dependents, W2 only, live in California", llm_client: llm_client)
+        engine.submit_introduction(
+          "I'm single, no dependents, W2 only, live in California",
+          llm_client: llm_client
+        )
         expect(engine.finished?).to be true
       end
     end
 
     context "when LLM extracts nothing" do
-      before do
-        allow(adapter).to receive(:chat).and_return("{}")
-      end
+      before { allow(adapter).to receive(:chat).and_return("{}") }
 
       it "stays at the first step" do
         engine.submit_introduction("hello", llm_client: llm_client)
@@ -115,19 +134,33 @@ RSpec.describe FlowEngine::Engine, "introduction" do
 
     context "with sensitive data" do
       it "raises SensitiveDataError for SSN" do
-        expect { engine.submit_introduction("My SSN is 123-45-6789", llm_client: llm_client) }
-          .to raise_error(FlowEngine::SensitiveDataError, /sensitive information/)
+        expect do
+          engine.submit_introduction(
+            "My SSN is 123-45-6789",
+            llm_client: llm_client
+          )
+        end.to raise_error(
+          FlowEngine::Errors::SensitiveDataError,
+          /sensitive information/
+        )
       end
 
       it "raises SensitiveDataError for EIN" do
-        expect { engine.submit_introduction("Business EIN 12-3456789", llm_client: llm_client) }
-          .to raise_error(FlowEngine::SensitiveDataError, /sensitive information/)
+        expect do
+          engine.submit_introduction(
+            "Business EIN 12-3456789",
+            llm_client: llm_client
+          )
+        end.to raise_error(
+          FlowEngine::Errors::SensitiveDataError,
+          /sensitive information/
+        )
       end
 
       it "does not store introduction text when sensitive data is detected" do
         begin
           engine.submit_introduction("SSN: 123-45-6789", llm_client: llm_client)
-        rescue FlowEngine::SensitiveDataError
+        rescue FlowEngine::Errors::SensitiveDataError
           # expected
         end
         expect(engine.introduction_text).to be_nil
@@ -137,7 +170,7 @@ RSpec.describe FlowEngine::Engine, "introduction" do
         allow(adapter).to receive(:chat)
         begin
           engine.submit_introduction("SSN: 123-45-6789", llm_client: llm_client)
-        rescue FlowEngine::SensitiveDataError
+        rescue FlowEngine::Errors::SensitiveDataError
           # expected
         end
         expect(adapter).not_to have_received(:chat)
@@ -158,20 +191,26 @@ RSpec.describe FlowEngine::Engine, "introduction" do
       end
 
       it "raises ValidationError when text exceeds maxlength" do
-        expect { engine.submit_introduction("A" * 21, llm_client: llm_client) }
-          .to raise_error(FlowEngine::ValidationError, %r{maxlength.*21/20})
+        expect do
+          engine.submit_introduction("A" * 21, llm_client: llm_client)
+        end.to raise_error(
+          FlowEngine::Errors::ValidationError,
+          %r{maxlength.*21/20}
+        )
       end
 
       it "accepts text within maxlength" do
         allow(adapter).to receive(:chat).and_return("{}")
-        expect { engine.submit_introduction("A" * 20, llm_client: llm_client) }.not_to raise_error
+        expect do
+          engine.submit_introduction("A" * 20, llm_client: llm_client)
+        end.not_to raise_error
       end
 
       it "does not call the LLM when maxlength is exceeded" do
         allow(adapter).to receive(:chat)
         begin
           engine.submit_introduction("A" * 21, llm_client: llm_client)
-        rescue FlowEngine::ValidationError
+        rescue FlowEngine::Errors::ValidationError
           # expected
         end
         expect(adapter).not_to have_received(:chat)
@@ -200,7 +239,10 @@ RSpec.describe FlowEngine::Engine, "introduction" do
     let(:state) do
       {
         current_step_id: :income_types,
-        answers: { filing_status: "single", dependents: 0 },
+        answers: {
+          filing_status: "single",
+          dependents: 0
+        },
         history: %i[filing_status dependents income_types],
         introduction_text: "I am single no dependents"
       }

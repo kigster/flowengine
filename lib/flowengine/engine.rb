@@ -42,10 +42,10 @@ module FlowEngine
     # @raise [AlreadyFinishedError] if the flow has already finished
     # @raise [ValidationError] if the validator rejects the value
     def answer(value)
-      raise AlreadyFinishedError, "Flow is already finished" if finished?
+      raise Errors::AlreadyFinishedError, "Flow is already finished" if finished?
 
       result = @validator.validate(current_step, value)
-      raise ValidationError, "Validation failed: #{result.errors.join(", ")}" unless result.valid?
+      raise Errors::ValidationError, "Validation failed: #{result.errors.join(", ")}" unless result.valid?
 
       answers[@current_step_id] = value
       advance_step
@@ -151,7 +151,7 @@ module FlowEngine
       return unless maxlength
       return if text.length <= maxlength
 
-      raise ValidationError, "Introduction text exceeds maxlength (#{text.length}/#{maxlength})"
+      raise Errors::ValidationError, "Introduction text exceeds maxlength (#{text.length}/#{maxlength})"
     end
 
     # Advances through consecutive steps that already have pre-filled answers.

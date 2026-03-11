@@ -45,8 +45,8 @@ module FlowEngine
       # @return [Definition]
       # @raise [DefinitionError] if start was not set or no steps were defined
       def build
-        raise DefinitionError, "No start step defined" if @start_step_id.nil?
-        raise DefinitionError, "No steps defined" if @nodes.empty?
+        raise ::FlowEngine::Errors::DefinitionError, "No start step defined" if @start_step_id.nil?
+        raise ::FlowEngine::Errors::DefinitionError, "No steps defined" if @nodes.empty?
 
         Definition.new(start_step_id: @start_step_id, nodes: @nodes, introduction: @introduction)
       end

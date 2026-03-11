@@ -7,14 +7,15 @@ RSpec.describe FlowEngine do
 
   describe ".define" do
     it "returns a frozen Definition" do
-      definition = FlowEngine.define do
-        start :step1
+      definition =
+        FlowEngine.define do
+          start :step1
 
-        step :step1 do
-          type :text
-          question "Hello?"
+          step :step1 do
+            type :text
+            question "Hello?"
+          end
         end
-      end
 
       expect(definition).to be_a(FlowEngine::Definition)
       expect(definition).to be_frozen
@@ -28,15 +29,19 @@ RSpec.describe FlowEngine do
             question "Hello?"
           end
         end
-      end.to raise_error(FlowEngine::DefinitionError, /No start step defined/)
+      end.to raise_error(
+        FlowEngine::Errors::DefinitionError,
+        /No start step defined/
+      )
     end
 
     it "raises when no steps are defined" do
       expect do
-        FlowEngine.define do
-          start :step1
-        end
-      end.to raise_error(FlowEngine::DefinitionError, /No steps defined/)
+        FlowEngine.define { start :step1 }
+      end.to raise_error(
+        FlowEngine::Errors::DefinitionError,
+        /No steps defined/
+      )
     end
   end
 end

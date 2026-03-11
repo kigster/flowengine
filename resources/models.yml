@@ -1,0 +1,25 @@
+models:
+  version: "1.0"
+  date: "Wed Mar 11 02:35:39 PDT 2026"
+  vendors:
+    anthropic: 
+      adapter: "FlowEngine::LLM::Adapters::AnthropicAdapter"
+      var: "ANTHROPIC_API_KEY"
+      top: "claude-opus-4-6"
+      default: "claude-sonnet-4-6"
+      fastest: "claude-haiku-4-5-20251001"
+    openai:
+      adapter: "FlowEngine::LLM::Adapters::OpenAIAdapter"
+      var: "OPENAI_API_KEY"
+      top: "gpt-5.4"
+      default: "gpt-5-mini"
+      fastest: "gpt-5-nano"
+    gemini:
+      adapter: "FlowEngine::LLM::Adapters::GeminiAdapter"
+      var: "GEMINI_API_KEY"
+      top: "gemini-3.1-pro-preview"
+      default: "gemini-2.5-flash"
+      fastest: "gemini-2.5-flash-lite"
+
+
+

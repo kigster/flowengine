@@ -5,7 +5,13 @@ RSpec.describe FlowEngine::Definition do
   let(:node2) { FlowEngine::Node.new(id: :step2, type: :text, question: "Q2") }
 
   subject(:definition) do
-    described_class.new(start_step_id: :step1, nodes: { step1: node1, step2: node2 })
+    described_class.new(
+      start_step_id: :step1,
+      nodes: {
+        step1: node1,
+        step2: node2
+      }
+    )
   end
 
   its(:start_step_id) { is_expected.to eq(:step1) }
@@ -31,7 +37,10 @@ RSpec.describe FlowEngine::Definition do
     end
 
     it "raises UnknownStepError for missing step" do
-      expect { definition.step(:nonexistent) }.to raise_error(FlowEngine::UnknownStepError, /nonexistent/)
+      expect { definition.step(:nonexistent) }.to raise_error(
+        FlowEngine::Errors::UnknownStepError,
+        /nonexistent/
+      )
     end
   end
 
@@ -45,7 +54,10 @@ RSpec.describe FlowEngine::Definition do
     it "raises DefinitionError when start step is not in nodes" do
       expect do
         described_class.new(start_step_id: :missing, nodes: { step1: node1 })
-      end.to raise_error(FlowEngine::DefinitionError, /Start step :missing not found/)
+      end.to raise_error(
+        FlowEngine::Errors::DefinitionError,
+        /Start step :missing not found/
+      )
     end
   end
 end

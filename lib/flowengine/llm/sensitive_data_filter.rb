@@ -36,7 +36,7 @@ module FlowEngine
 
         return if detected.empty?
 
-        raise SensitiveDataError,
+        raise ::FlowEngine::Errors::SensitiveDataError,
               "Introduction contains sensitive information (#{detected.join(", ")}). " \
               "Please remove all SSN, ITIN, EIN, and account numbers before proceeding."
       end

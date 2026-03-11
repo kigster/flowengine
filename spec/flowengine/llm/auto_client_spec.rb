@@ -27,8 +27,10 @@ RSpec.describe FlowEngine::LLM, ".auto_client" do
 
     subject(:client) { described_class.auto_client }
 
-    its(:adapter) { is_expected.to be_a(FlowEngine::LLM::AnthropicAdapter) }
-    its(:model) { is_expected.to eq("claude-sonnet-4-20250514") }
+    its(:adapter) do
+      is_expected.to be_a(FlowEngine::LLM::Adapters::AnthropicAdapter)
+    end
+    its(:model) { is_expected.to eq("claude-sonnet-4-6") }
   end
 
   context "when only OPENAI_API_KEY is set" do
@@ -39,8 +41,10 @@ RSpec.describe FlowEngine::LLM, ".auto_client" do
 
     subject(:client) { described_class.auto_client }
 
-    its(:adapter) { is_expected.to be_a(FlowEngine::LLM::OpenAIAdapter) }
-    its(:model) { is_expected.to eq("gpt-4o-mini") }
+    its(:adapter) do
+      is_expected.to be_a(FlowEngine::LLM::Adapters::OpenAIAdapter)
+    end
+    its(:model) { is_expected.to eq("gpt-5-mini") }
   end
 
   context "when only GEMINI_API_KEY is set" do
@@ -51,8 +55,10 @@ RSpec.describe FlowEngine::LLM, ".auto_client" do
 
     subject(:client) { described_class.auto_client }
 
-    its(:adapter) { is_expected.to be_a(FlowEngine::LLM::GeminiAdapter) }
-    its(:model) { is_expected.to eq("gemini-2.0-flash") }
+    its(:adapter) do
+      is_expected.to be_a(FlowEngine::LLM::Adapters::GeminiAdapter)
+    end
+    its(:model) { is_expected.to eq("gemini-2.5-flash") }
   end
 
   context "when all three keys are set" do
@@ -65,7 +71,9 @@ RSpec.describe FlowEngine::LLM, ".auto_client" do
     subject(:client) { described_class.auto_client }
 
     it "prefers Anthropic" do
-      expect(client.adapter).to be_a(FlowEngine::LLM::AnthropicAdapter)
+      expect(client.adapter).to be_a(
+        FlowEngine::LLM::Adapters::AnthropicAdapter
+      )
     end
   end
 
@@ -79,7 +87,7 @@ RSpec.describe FlowEngine::LLM, ".auto_client" do
     subject(:client) { described_class.auto_client }
 
     it "prefers OpenAI over Gemini" do
-      expect(client.adapter).to be_a(FlowEngine::LLM::OpenAIAdapter)
+      expect(client.adapter).to be_a(FlowEngine::LLM::Adapters::OpenAIAdapter)
     end
   end
 
@@ -88,17 +96,19 @@ RSpec.describe FlowEngine::LLM, ".auto_client" do
 
     it "uses explicit anthropic key" do
       client = described_class.auto_client(anthropic_api_key: "sk-ant-explicit")
-      expect(client.adapter).to be_a(FlowEngine::LLM::AnthropicAdapter)
+      expect(client.adapter).to be_a(
+        FlowEngine::LLM::Adapters::AnthropicAdapter
+      )
     end
 
     it "uses explicit openai key" do
       client = described_class.auto_client(openai_api_key: "sk-openai-explicit")
-      expect(client.adapter).to be_a(FlowEngine::LLM::OpenAIAdapter)
+      expect(client.adapter).to be_a(FlowEngine::LLM::Adapters::OpenAIAdapter)
     end
 
     it "uses explicit gemini key" do
       client = described_class.auto_client(gemini_api_key: "AIza-explicit")
-      expect(client.adapter).to be_a(FlowEngine::LLM::GeminiAdapter)
+      expect(client.adapter).to be_a(FlowEngine::LLM::Adapters::GeminiAdapter)
     end
   end
 
@@ -108,7 +118,9 @@ RSpec.describe FlowEngine::LLM, ".auto_client" do
       ENV["ANTHROPIC_API_KEY"] = "sk-ant-test"
     end
 
-    subject(:client) { described_class.auto_client(model: "claude-haiku-4-5-20251001") }
+    subject(:client) do
+      described_class.auto_client(model: "claude-haiku-4-5-20251001")
+    end
 
     its(:model) { is_expected.to eq("claude-haiku-4-5-20251001") }
   end
@@ -118,7 +130,8 @@ RSpec.describe FlowEngine::LLM, ".auto_client" do
 
     it "raises LLMError" do
       expect { described_class.auto_client }.to raise_error(
-        FlowEngine::LLMError, /No LLM API key found/
+        FlowEngine::Errors::LLMError,
+        /No LLM API key found/
       )
     end
   end

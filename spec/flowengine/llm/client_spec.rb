@@ -40,7 +40,10 @@ RSpec.describe FlowEngine::LLM::Client do
       end
 
       subject(:result) do
-        client.parse_introduction(definition: definition, introduction_text: "I am single with 2 kids")
+        client.parse_introduction(
+          definition: definition,
+          introduction_text: "I am single with 2 kids"
+        )
       end
 
       it { is_expected.to be_a(Hash) }
@@ -66,29 +69,45 @@ RSpec.describe FlowEngine::LLM::Client do
       end
 
       it "extracts JSON from code fences" do
-        result = client.parse_introduction(definition: definition, introduction_text: "test")
+        result =
+          client.parse_introduction(
+            definition: definition,
+            introduction_text: "test"
+          )
         expect(result[:filing_status]).to eq("married_filing_jointly")
       end
     end
 
     context "when LLM returns partial answers" do
       before do
-        allow(adapter).to receive(:chat).and_return('{"filing_status": "single"}')
+        allow(adapter).to receive(:chat).and_return(
+          '{"filing_status": "single"}'
+        )
       end
 
       it "only includes steps the LLM extracted" do
-        result = client.parse_introduction(definition: definition, introduction_text: "I am single")
+        result =
+          client.parse_introduction(
+            definition: definition,
+            introduction_text: "I am single"
+          )
         expect(result.keys).to eq([:filing_status])
       end
     end
 
     context "when LLM returns unknown step IDs" do
       before do
-        allow(adapter).to receive(:chat).and_return('{"filing_status": "single", "unknown_step": "ignored"}')
+        allow(adapter).to receive(:chat).and_return(
+          '{"filing_status": "single", "unknown_step": "ignored"}'
+        )
       end
 
       it "ignores step IDs not in the definition" do
-        result = client.parse_introduction(definition: definition, introduction_text: "test")
+        result =
+          client.parse_introduction(
+            definition: definition,
+            introduction_text: "test"
+          )
         expect(result.keys).to eq([:filing_status])
         expect(result).not_to have_key(:unknown_step)
       end
@@ -100,8 +119,12 @@ RSpec.describe FlowEngine::LLM::Client do
       end
 
       it "raises LLMError" do
-        expect { client.parse_introduction(definition: definition, introduction_text: "test") }
-          .to raise_error(FlowEngine::LLMError, /Failed to parse/)
+        expect do
+          client.parse_introduction(
+            definition: definition,
+            introduction_text: "test"
+          )
+        end.to raise_error(FlowEngine::Errors::LLMError, /Failed to parse/)
       end
     end
 
@@ -125,14 +148,21 @@ RSpec.describe FlowEngine::LLM::Client do
       end
 
       it "coerces number_matrix values to integers" do
-        result = client.parse_introduction(definition: definition, introduction_text: "test")
+        result =
+          client.parse_introduction(
+            definition: definition,
+            introduction_text: "test"
+          )
         expect(result[:business_details]).to eq({ RealEstate: 2, LLC: 1 })
       end
     end
 
     it "passes the correct model to the adapter" do
       allow(adapter).to receive(:chat).and_return("{}")
-      client.parse_introduction(definition: definition, introduction_text: "test")
+      client.parse_introduction(
+        definition: definition,
+        introduction_text: "test"
+      )
       expect(adapter).to have_received(:chat).with(
         system_prompt: a_kind_of(String),
         user_prompt: "test",

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe FlowEngine::LLM::AnthropicAdapter do
+RSpec.describe FlowEngine::LLM::Adapters::AnthropicAdapter do
   describe ".new" do
     context "with explicit API key" do
       subject(:adapter) { described_class.new(api_key: "sk-ant-test-key") }
@@ -13,7 +13,11 @@ RSpec.describe FlowEngine::LLM::AnthropicAdapter do
         original = ENV.fetch("ANTHROPIC_API_KEY", nil)
         ENV["ANTHROPIC_API_KEY"] = "sk-ant-env-key"
         example.run
-        original ? ENV["ANTHROPIC_API_KEY"] = original : ENV.delete("ANTHROPIC_API_KEY")
+        if original
+          ENV["ANTHROPIC_API_KEY"] = original
+        else
+          ENV.delete("ANTHROPIC_API_KEY")
+        end
       end
 
       subject(:adapter) { described_class.new }
@@ -30,7 +34,10 @@ RSpec.describe FlowEngine::LLM::AnthropicAdapter do
       end
 
       it "raises LLMError" do
-        expect { described_class.new }.to raise_error(FlowEngine::LLMError, /API key/)
+        expect { described_class.new }.to raise_error(
+          FlowEngine::Errors::LLMError,
+          /API key/
+        )
       end
     end
   end
@@ -38,11 +45,18 @@ RSpec.describe FlowEngine::LLM::AnthropicAdapter do
   describe "#chat" do
     subject(:adapter) { described_class.new(api_key: "sk-ant-test-key") }
 
-    let(:mock_response) { instance_double("RubyLLM::Response", content: '{"filing_status": "married"}') }
+    let(:mock_response) do
+      instance_double(
+        "RubyLLM::Response",
+        content: '{"filing_status": "married"}'
+      )
+    end
     let(:mock_chat) { instance_double("RubyLLM::Chat") }
 
     before do
-      allow(RubyLLM).to receive(:configure).and_yield(double("config", anthropic_api_key: nil).as_null_object)
+      allow(RubyLLM).to receive(:configure).and_yield(
+        double("config", anthropic_api_key: nil).as_null_object
+      )
       allow(RubyLLM).to receive(:chat).and_return(mock_chat)
       allow(mock_chat).to receive(:with_instructions).and_return(mock_chat)
       allow(mock_chat).to receive(:ask).and_return(mock_response)
@@ -55,7 +69,9 @@ RSpec.describe FlowEngine::LLM::AnthropicAdapter do
 
     it "uses the default Anthropic model" do
       adapter.chat(system_prompt: "system", user_prompt: "user")
-      expect(RubyLLM).to have_received(:chat).with(model: "claude-sonnet-4-20250514")
+      expect(RubyLLM).to have_received(:chat).with(
+        model: "claude-sonnet-4-6"
+      )
     end
 
     it "passes the system prompt as instructions" do
@@ -64,13 +80,22 @@ RSpec.describe FlowEngine::LLM::AnthropicAdapter do
     end
 
     it "passes the user prompt as the question" do
-      adapter.chat(system_prompt: "system", user_prompt: "I am married with 2 kids")
+      adapter.chat(
+        system_prompt: "system",
+        user_prompt: "I am married with 2 kids"
+      )
       expect(mock_chat).to have_received(:ask).with("I am married with 2 kids")
     end
 
     it "accepts a custom model" do
-      adapter.chat(system_prompt: "system", user_prompt: "user", model: "claude-haiku-4-5-20251001")
-      expect(RubyLLM).to have_received(:chat).with(model: "claude-haiku-4-5-20251001")
+      adapter.chat(
+        system_prompt: "system",
+        user_prompt: "user",
+        model: "claude-haiku-4-5-20251001"
+      )
+      expect(RubyLLM).to have_received(:chat).with(
+        model: "claude-haiku-4-5-20251001"
+      )
     end
   end
 end

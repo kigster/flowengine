@@ -41,13 +41,19 @@ RSpec.describe "FlowEngine.load_dsl" do
   it "raises DefinitionError on syntax error" do
     expect do
       FlowEngine.load_dsl("def foo(")
-    end.to raise_error(FlowEngine::DefinitionError, /DSL syntax error/)
+    end.to raise_error(
+      FlowEngine::Errors::DefinitionError,
+      /DSL syntax error/
+    )
   end
 
   it "raises DefinitionError on runtime error" do
     expect do
       FlowEngine.load_dsl("raise 'boom'")
-    end.to raise_error(FlowEngine::DefinitionError, /DSL evaluation error.*boom/)
+    end.to raise_error(
+      FlowEngine::Errors::DefinitionError,
+      /DSL evaluation error.*boom/
+    )
   end
 
   it "raises DefinitionError when DSL returns non-Definition" do

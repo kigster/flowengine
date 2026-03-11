@@ -1,0 +1,50 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "flowengine"
+
+HAVE_TTY = $stdin.tty? && $stdout.tty? && $stderr.tty?
+
+if HAVE_TTY
+  require "tty-box"
+  require "tty-prompt"
+end
+
+def error_box(message)
+  if HAVE_TTY
+    puts TTY::Box.error(message)
+  else
+    warn message
+  end
+end
+
+puts FlowEngine::LLM::ADAPTERS
+
+begin
+  client = FlowEngine::LLM.auto_client
+rescue FlowEngine::Errors::LLMError => e
+  error_box("ERROR: #{e.message}")
+  exit 1
+end
+
+print "Ask: "
+question = $stdin.gets&.strip
+
+if question.nil? || question.empty?
+  warn "No question provided."
+  exit 1
+end
+
+begin
+  response = client.adapter.chat(
+    system_prompt: "You are a helpful assistant. Answer concisely.",
+    user_prompt: question,
+    model: client.model
+  )
+rescue FlowEngine::Errors::LLMError => e
+  warn e.message
+  exit 1
+end
+
+puts "\n#{response}"

@@ -36,7 +36,13 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
+  spec.add_dependency "activesupport"
+  spec.add_dependency "pastel"
+  spec.add_dependency "readline"
   spec.add_dependency "ruby_llm"
+  spec.add_dependency "tty-box"
+  spec.add_dependency "tty-prompt"
+  spec.add_dependency "zeitwerk"
 
   spec.add_development_dependency "rspec"
   spec.add_development_dependency "rspec-its", "~> 2.0"
