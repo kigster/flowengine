@@ -6,8 +6,7 @@ loader = Zeitwerk::Loader.for_gem
 loader.inflector.inflect(
   "flowengine" => "FlowEngine",
   "llm" => "LLM",
-  "dsl" => "DSL",
-  "openai_adapter" => "OpenAIAdapter"
+  "dsl" => "DSL"
 )
 loader.setup
 
