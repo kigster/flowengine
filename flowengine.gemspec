@@ -37,6 +37,8 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "ruby_llm"
+  spec.add_dependency "tty-box"
+  spec.add_dependency "tty-prompt"
   spec.add_dependency "zeitwerk"
 
   spec.add_development_dependency "rspec"

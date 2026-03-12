@@ -1,0 +1,16 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: format
+      glob: "*.{js,ts,tsx}"
+      run: npx biome format --write {staged_files}
+      stage_fixed: true
+
+    - name: rubocop
+      glob: "*.{rb,rake}"
+      run: bundle exec rubocop -a --format progress {staged_files}
+      staged_fixed: true
+
+    - name: rspecs
+      glob: "spec/**/*_spec.rb"
+      run: bundle exec rspec --format progress
